@@ -52,7 +52,7 @@ class OpenAIResearchAgent:
     def __init__(
         self,
         api_key: str,
-        model: str = "gpt-5-mini",
+        model: str = "gpt-5.4-mini",
         timeout_seconds: float = 90,
         client: OpenAI | None = None,
         deterministic: MockCatalogModule | None = None,
