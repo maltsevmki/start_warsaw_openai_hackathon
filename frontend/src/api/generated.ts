@@ -174,6 +174,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workflows/{workflow_id}/select-offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select Offer */
+        post: operations["select_offer_api_workflows__workflow_id__select_offer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workflows/{workflow_id}/checkout": {
         parameters: {
             query?: never;
@@ -625,6 +642,11 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** SelectOfferRequest */
+        SelectOfferRequest: {
+            /** Offerid */
+            offerId: string;
+        };
         /** ShoppingConstraints */
         ShoppingConstraints: {
             /** Productcategory */
@@ -703,7 +725,7 @@ export interface components {
             /** Summary */
             summary: string;
             /** Availableactions */
-            availableActions: ("reply_to_clarification" | "accept_alternative" | "reject_alternative" | "approve_proposal" | "reject_proposal" | "execute_checkout" | "simulate_tracking" | "cancel")[];
+            availableActions: ("reply_to_clarification" | "accept_alternative" | "reject_alternative" | "approve_proposal" | "reject_proposal" | "select_offer" | "execute_checkout" | "simulate_tracking" | "cancel")[];
         };
         /** WorkflowView */
         WorkflowView: {
@@ -989,6 +1011,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RejectProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_offer_api_workflows__workflow_id__select_offer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectOfferRequest"];
             };
         };
         responses: {

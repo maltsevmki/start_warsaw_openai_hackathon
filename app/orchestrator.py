@@ -44,7 +44,7 @@ class WorkflowOrchestrator:
         "awaiting_alternative_acceptance": ["accept_alternative", "reject_alternative", "cancel"],
         "comparing": [],
         "proposal_ready": [],
-        "awaiting_approval": ["approve_proposal", "reject_proposal", "cancel"],
+        "awaiting_approval": ["select_offer", "approve_proposal", "reject_proposal", "cancel"],
         "rejected": [],
         "checkout_in_progress": [],
         "checkout_failed": ["cancel"],
@@ -199,6 +199,47 @@ class WorkflowOrchestrator:
             {"reason": reason},
         )
         self._transition(record, "rejected", "Proposal rejected. No purchase was made.")
+        return self._view(record)
+
+    def select_offer(self, workflow_id: str, offer_id: str) -> schemas.WorkflowView:
+        record = self._record(workflow_id)
+        self._require_state(record, "awaiting_approval")
+        if record.approval:
+            raise DomainError("The offer cannot be changed after approval", 409)
+        if not record.comparison or not record.proposal:
+            raise DomainError("Workflow has no comparison or current proposal")
+        top_offer_ids = [item.offer_id for item in record.comparison.ranked_offers[:3]]
+        if offer_id not in top_offer_ids:
+            raise DomainError("Offer must belong to the current top three", 422)
+        if record.proposal.offer_id == offer_id:
+            return self._view(record)
+        offer = self.catalog.get_offer(offer_id)
+        if not offer:
+            raise DomainError("Selected offer is no longer available", 404)
+
+        previous_offer_id = record.proposal.offer_id
+        record.proposal.status = "expired"
+        record.proposal = self.proposals.create_proposal(
+            record.workflow.id,
+            offer,
+            record.comparison,
+            self.profile.get_profile(),
+        )
+        self._event(
+            record,
+            "proposal.offer_changed",
+            "user",
+            "proposal",
+            f"User changed the selected offer to {offer.title}.",
+            {
+                "previousOfferId": previous_offer_id,
+                "offerId": offer_id,
+                "proposalId": record.proposal.id,
+                "hash": record.proposal.hash,
+            },
+        )
+        record.workflow.summary = "Selection updated. Review the new exact proposal terms."
+        self._refresh_actions(record)
         return self._view(record)
 
     def execute_checkout(self, workflow_id: str, approval_id: str) -> schemas.WorkflowView:

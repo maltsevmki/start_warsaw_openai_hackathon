@@ -107,3 +107,52 @@ def test_invalid_approval_is_rejected_before_checkout():
     )
     assert response.status_code == 409
     assert "hash" in response.json()["detail"].lower()
+
+
+def test_user_can_select_another_top_offer_before_approval():
+    view = client.post("/api/workflows", json={"prompt": HAPPY_PROMPT}).json()
+    workflow_id = view["workflow"]["id"]
+    current_offer_id = view["proposal"]["offerId"]
+    alternate = next(
+        offer for offer in view["comparison"]["rankedOffers"][:3]
+        if offer["offerId"] != current_offer_id
+    )
+
+    selected = client.post(
+        f"/api/workflows/{workflow_id}/select-offer",
+        json={"offerId": alternate["offerId"]},
+    )
+
+    assert selected.status_code == 200
+    updated = selected.json()
+    assert updated["proposal"]["offerId"] == alternate["offerId"]
+    assert updated["proposal"]["id"] != view["proposal"]["id"]
+    assert "select_offer" in updated["workflow"]["availableActions"]
+    assert updated["events"][-1]["type"] == "proposal.offer_changed"
+
+
+def test_offer_cannot_be_changed_after_approval_or_outside_top_three():
+    view = client.post("/api/workflows", json={"prompt": HAPPY_PROMPT}).json()
+    workflow_id = view["workflow"]["id"]
+    invalid = client.post(
+        f"/api/workflows/{workflow_id}/select-offer",
+        json={"offerId": "offer_not_in_comparison"},
+    )
+    assert invalid.status_code == 422
+
+    proposal = view["proposal"]
+    approved = client.post(
+        f"/api/workflows/{workflow_id}/approve",
+        json={
+            "proposalId": proposal["id"],
+            "proposalVersion": proposal["version"],
+            "proposalHash": proposal["hash"],
+            "approved": True,
+        },
+    )
+    assert approved.status_code == 200
+    blocked = client.post(
+        f"/api/workflows/{workflow_id}/select-offer",
+        json={"offerId": view["comparison"]["rankedOffers"][1]["offerId"]},
+    )
+    assert blocked.status_code == 409

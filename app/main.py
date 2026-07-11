@@ -132,6 +132,15 @@ def reject_proposal(workflow_id: str, body: schemas.RejectProposalRequest):
 
 
 @app.post(
+    "/api/workflows/{workflow_id}/select-offer",
+    response_model=schemas.WorkflowView,
+    response_model_exclude_none=True,
+)
+def select_offer(workflow_id: str, body: schemas.SelectOfferRequest):
+    return orchestrator.select_offer(workflow_id, body.offer_id)
+
+
+@app.post(
     "/api/workflows/{workflow_id}/checkout",
     response_model=schemas.WorkflowView,
     response_model_exclude_none=True,

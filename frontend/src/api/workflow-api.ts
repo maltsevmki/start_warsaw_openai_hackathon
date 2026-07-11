@@ -61,6 +61,12 @@ export const rejectProposal = (
     body: JSON.stringify(input),
   })
 
+export const selectOffer = (workflowId: string, offerId: string) =>
+  request<WorkflowView>(`/api/workflows/${workflowId}/select-offer`, {
+    method: 'POST',
+    body: JSON.stringify({ offerId }),
+  })
+
 export const executeCheckout = (workflowId: string, approvalId: string) =>
   request<WorkflowView>(`/api/workflows/${workflowId}/checkout`, {
     method: 'POST',
