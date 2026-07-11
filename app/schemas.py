@@ -207,6 +207,19 @@ class RankedOffer(APIModel):
     risk_flags: list[str] = Field(default_factory=list, alias="riskFlags")
 
 
+class RequirementCheck(APIModel):
+    """One hard requirement the user asked for, and whether the pick meets it.
+
+    Computed deterministically from the chosen offer's real facts (price, delivery,
+    compatibility, returns) versus the user's constraints — an honest, explainable
+    replacement for a vague confidence percentage.
+    """
+
+    key: str
+    label: str
+    met: bool
+
+
 class ComparisonResult(APIModel):
     id: str
     best_offer_id: str | None = Field(alias="bestOfferId")
@@ -214,6 +227,9 @@ class ComparisonResult(APIModel):
     recommendation: Literal["proceed", "ask_user", "stop"]
     summary: str
     ranked_offers: list[RankedOffer] = Field(alias="rankedOffers")
+    requirement_checks: list[RequirementCheck] = Field(
+        default_factory=list, alias="requirementChecks"
+    )
     missing_evidence: list[str] = Field(default_factory=list, alias="missingEvidence")
 
 

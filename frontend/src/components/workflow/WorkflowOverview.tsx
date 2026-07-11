@@ -120,6 +120,8 @@ export function ComparisonSection({
   onSelect: (offerId: string) => void
 }) {
   if (!comparison) return null
+  const checks = comparison.requirementChecks ?? []
+  const metCount = checks.filter((check) => check.met).length
   return (
     <section className="content-card">
       <div className="section-heading split-heading">
@@ -127,10 +129,20 @@ export function ComparisonSection({
           <div className="icon-tile"><ShieldCheck size={18} /></div>
           <div><p className="eyebrow">Evidence &amp; tradeoffs</p><h2>Offer comparison</h2></div>
         </div>
-        <span className="confidence">{Math.round(comparison.confidence * 100)}% confidence</span>
+        {checks.length > 0 && (
+          <span className="confidence">✓ Meets {metCount} of {checks.length} of your requirements</span>
+        )}
       </div>
       <p className="recommendation-copy">{comparison.summary}</p>
-      <p className="confidence-note">Confidence summarizes available catalog evidence; it is not a guarantee.</p>
+      {checks.length > 0 && (
+        <div className="reason-list" style={{ margin: '4px 0 16px' }}>
+          {checks.map((check) => (
+            <span key={check.key} className={check.met ? 'positive' : 'negative'}>
+              {check.met ? '✓' : '×'} {check.label}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="offer-list">
         {comparison.rankedOffers.slice(0, 3).map((offer) => {
           const best = offer.offerId === comparison.bestOfferId
