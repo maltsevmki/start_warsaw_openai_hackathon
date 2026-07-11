@@ -34,6 +34,7 @@ WorkflowAction = Literal[
     "execute_checkout",
     "simulate_tracking",
     "cancel",
+    "rollback",
 ]
 OrderStatus = Literal[
     "order_created",
@@ -321,6 +322,26 @@ class WorkflowSummary(APIModel):
     available_actions: list[WorkflowAction] = Field(alias="availableActions")
 
 
+class WorkflowRevision(APIModel):
+    id: str
+    workflow_id: str = Field(alias="workflowId")
+    parent_revision_id: str | None = Field(default=None, alias="parentRevisionId")
+    rollback_from_revision_id: str | None = Field(default=None, alias="rollbackFromRevisionId")
+    sequence: int
+    state: WorkflowState
+    action: str
+    label: str
+    summary: str
+    created_at: datetime = Field(alias="createdAt")
+    is_current: bool = Field(alias="isCurrent")
+    can_rollback: bool = Field(alias="canRollback")
+
+
+class WorkflowHistory(APIModel):
+    current_revision_id: str = Field(alias="currentRevisionId")
+    revisions: list[WorkflowRevision]
+
+
 class WorkflowView(APIModel):
     workflow: WorkflowSummary
     clarification: ClarificationQuestion | None = None
@@ -333,6 +354,7 @@ class WorkflowView(APIModel):
     checkout: CheckoutAttempt | None = None
     order: Order | None = None
     events: list[DomainEvent]
+    history: WorkflowHistory
 
 
 class StartWorkflowRequest(APIModel):
@@ -372,6 +394,10 @@ class RejectProposalRequest(APIModel):
 
 class CheckoutRequest(APIModel):
     approval_id: str = Field(alias="approvalId")
+
+
+class RollbackWorkflowRequest(APIModel):
+    revision_id: str = Field(alias="revisionId")
 
 
 class SimulateStatusRequest(APIModel):

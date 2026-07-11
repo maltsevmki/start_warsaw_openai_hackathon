@@ -146,3 +146,26 @@ def test_invalid_approval_is_rejected_before_checkout():
     )
     assert response.status_code == 409
     assert "hash" in response.json()["detail"].lower()
+
+
+def test_rollback_endpoint_restores_a_selected_revision():
+    initial = client.post("/api/workflows", json={"prompt": "Buy me shoes for tomorrow."}).json()
+    workflow_id = initial["workflow"]["id"]
+    target_revision_id = initial["history"]["currentRevisionId"]
+    answered = client.post(
+        f"/api/workflows/{workflow_id}/messages",
+        json={"message": "Size 42, black, comfortable for walking."},
+    ).json()
+    assert answered["workflow"]["state"] == "awaiting_approval"
+
+    restored = client.post(
+        f"/api/workflows/{workflow_id}/rollback",
+        json={"revisionId": target_revision_id},
+    )
+
+    assert restored.status_code == 200
+    body = restored.json()
+    assert body["workflow"]["state"] == "needs_clarification"
+    assert "proposal" not in body
+    assert body["history"]["currentRevisionId"] != target_revision_id
+    assert len(body["history"]["revisions"]) == 3

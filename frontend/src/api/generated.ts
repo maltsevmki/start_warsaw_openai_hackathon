@@ -208,6 +208,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workflows/{workflow_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rollback Workflow */
+        post: operations["rollback_workflow_api_workflows__workflow_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workflows/{workflow_id}/events": {
         parameters: {
             query?: never;
@@ -664,6 +681,11 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** RollbackWorkflowRequest */
+        RollbackWorkflowRequest: {
+            /** Revisionid */
+            revisionId: string;
+        };
         /** ShoppingConstraints */
         ShoppingConstraints: {
             /** Productcategory */
@@ -713,6 +735,46 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** WorkflowHistory */
+        WorkflowHistory: {
+            /** Currentrevisionid */
+            currentRevisionId: string;
+            /** Revisions */
+            revisions: components["schemas"]["WorkflowRevision"][];
+        };
+        /** WorkflowRevision */
+        WorkflowRevision: {
+            /** Id */
+            id: string;
+            /** Workflowid */
+            workflowId: string;
+            /** Parentrevisionid */
+            parentRevisionId?: string | null;
+            /** Rollbackfromrevisionid */
+            rollbackFromRevisionId?: string | null;
+            /** Sequence */
+            sequence: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "created" | "needs_clarification" | "blocked_by_policy" | "researching" | "no_exact_match" | "awaiting_alternative_acceptance" | "comparing" | "proposal_ready" | "awaiting_approval" | "rejected" | "checkout_in_progress" | "checkout_failed" | "ordered" | "tracking" | "completed" | "cancelled";
+            /** Action */
+            action: string;
+            /** Label */
+            label: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /** Iscurrent */
+            isCurrent: boolean;
+            /** Canrollback */
+            canRollback: boolean;
+        };
         /** WorkflowSummary */
         WorkflowSummary: {
             /** Id */
@@ -742,7 +804,7 @@ export interface components {
             /** Summary */
             summary: string;
             /** Availableactions */
-            availableActions: ("reply_to_clarification" | "accept_alternative" | "reject_alternative" | "approve_proposal" | "reject_proposal" | "execute_checkout" | "simulate_tracking" | "cancel")[];
+            availableActions: ("reply_to_clarification" | "accept_alternative" | "reject_alternative" | "approve_proposal" | "reject_proposal" | "execute_checkout" | "simulate_tracking" | "cancel" | "rollback")[];
         };
         /** WorkflowView */
         WorkflowView: {
@@ -759,6 +821,7 @@ export interface components {
             order?: components["schemas"]["Order"] | null;
             /** Events */
             events: components["schemas"]["DomainEvent"][];
+            history: components["schemas"]["WorkflowHistory"];
         };
     };
     responses: never;
@@ -1096,6 +1159,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollback_workflow_api_workflows__workflow_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RollbackWorkflowRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

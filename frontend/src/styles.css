@@ -136,7 +136,7 @@ a { color: inherit; }
 .brand-footer { display: flex; align-items: center; gap: 6px; color: var(--ink-soft); font-family: var(--serif); font-size: 13px; }
 
 .workflow-page { padding: 38px 0 80px; }
-.workflow-stack { display: grid; gap: 18px; }
+.workflow-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 .workflow-hero, .content-card, .decision-card, .audit-card { border: 1px solid var(--line); background: var(--paper); box-shadow: 0 8px 28px rgba(38,58,50,.045); }
 .workflow-hero { border-radius: 18px; padding: 24px 26px 20px; }
 .workflow-hero-top { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
@@ -165,6 +165,34 @@ a { color: inherit; }
 .section-heading, .heading-group { display: flex; align-items: center; gap: 11px; }
 .section-heading h2, .audit-heading h2 { margin: 0; font-family: var(--serif); font-size: 19px; }
 .icon-tile { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; color: var(--green); background: var(--green-pale); }
+
+.history-card { min-width: 0; overflow: hidden; }
+.history-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.history-heading h2 { margin: 0; font-family: var(--serif); font-size: 19px; }
+.history-heading > span { flex-shrink: 0; color: var(--ink-faint); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.history-intro { margin: 13px 0 17px; color: var(--ink-soft); font-size: 11px; line-height: 1.5; }
+.revision-tree { overflow-x: auto; padding: 5px 5px 13px; }
+.revision-branch { position: relative; display: flex; align-items: center; gap: 28px; width: max-content; }
+.revision-children { position: relative; display: grid; gap: 9px; padding-left: 24px; }
+.revision-children::before { content: ""; position: absolute; left: 0; top: 21px; bottom: 21px; width: 1px; background: var(--line-strong); }
+.revision-children::after { content: ""; position: absolute; left: -28px; top: 50%; width: 28px; height: 1px; background: var(--line-strong); }
+.revision-children > .revision-branch::before { content: ""; position: absolute; left: -24px; top: 50%; width: 24px; height: 1px; background: var(--line-strong); }
+.revision-node { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 194px; min-height: 50px; border: 1px solid var(--line); border-radius: 11px; padding: 8px 10px; color: var(--ink); text-align: left; background: var(--paper); cursor: pointer; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.revision-node:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--green) 40%, var(--line)); }
+.revision-node.selected { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-pale); }
+.revision-node.current { background: color-mix(in srgb, var(--green-pale) 38%, var(--paper)); }
+.revision-sequence { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; color: var(--green); background: var(--green-pale); font-size: 9px; font-weight: 700; }
+.revision-node-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.revision-node-copy strong { overflow: hidden; text-overflow: ellipsis; font-size: 10px; white-space: nowrap; }
+.revision-node-copy small { color: var(--ink-faint); font-size: 8px; }
+.revision-current-dot { width: 8px; height: 8px; border: 2px solid var(--paper); border-radius: 50%; background: var(--green); box-shadow: 0 0 0 1px var(--green); }
+.revision-jump { position: absolute; top: -7px; right: 8px; border-radius: 99px; padding: 2px 5px; color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, var(--paper)); font-size: 7px; font-weight: 700; }
+.revision-selection { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-top: 1px solid var(--line); padding-top: 15px; }
+.revision-selection > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.revision-selection > div span { color: var(--green); font-size: 8px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.revision-selection > div strong { font-size: 11px; }
+.revision-selection > div small { overflow: hidden; text-overflow: ellipsis; color: var(--ink-faint); font-size: 9px; white-space: nowrap; }
+.current-revision-label { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--green); font-size: 10px; font-weight: 700; }
 .request-card blockquote { margin: 19px 0 17px; border-left: 2px solid var(--green); padding: 2px 0 2px 15px; color: var(--ink-soft); font-family: var(--serif); font-size: 16px; line-height: 1.55; }
 .constraint-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .constraint-grid > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; background: color-mix(in srgb, var(--cream) 65%, var(--paper)); }
@@ -296,6 +324,14 @@ a { color: inherit; }
   .how-grid { grid-template-columns: 1fr; }
   .site-footer > div { flex-direction: column; text-align: center; }
   .workflow-page { padding-top: 18px; }.workflow-hero { padding: 19px 17px; }.workflow-hero-top { flex-direction: column; }.workflow-meta { gap: 7px 12px; }
+  .revision-tree { overflow: visible; }
+  .revision-branch { display: block; width: 100%; }
+  .revision-children { margin-top: 9px; padding-left: 24px; }
+  .revision-children::before { left: 10px; top: -9px; bottom: 25px; }
+  .revision-children::after { display: none; }
+  .revision-children > .revision-branch::before { left: -14px; top: 25px; width: 14px; }
+  .revision-node { width: 100%; }
+  .revision-selection { align-items: stretch; flex-direction: column; }.revision-selection .button { width: 100%; }
   .progress-track { overflow-x: auto; padding-bottom: 5px; }.progress-track li { min-width: 67px; }.progress-track li small { font-size: 8px; }
   .content-card, .decision-card { padding: 18px; }.constraint-grid { grid-template-columns: 1fr 1fr; }
   .proposal-card { padding: 0; }.proposal-title { flex-direction: column; }.proposal-facts { grid-template-columns: 1fr 1fr; }.proposal-facts > div:nth-child(2) { border-right: 0; }.proposal-facts > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }

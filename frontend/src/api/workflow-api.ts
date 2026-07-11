@@ -71,6 +71,12 @@ export const executeCheckout = (workflowId: string, approvalId: string) =>
 export const cancelWorkflow = (workflowId: string) =>
   request<WorkflowView>(`/api/workflows/${workflowId}/cancel`, { method: 'POST' })
 
+export const rollbackWorkflow = (workflowId: string, revisionId: string) =>
+  request<WorkflowView>(`/api/workflows/${workflowId}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({ revisionId }),
+  })
+
 export const getWorkflowEvents = (workflowId: string, signal?: AbortSignal) =>
   request<{ workflowId: string; events: DomainEvent[] }>(
     `/api/workflows/${workflowId}/events`,

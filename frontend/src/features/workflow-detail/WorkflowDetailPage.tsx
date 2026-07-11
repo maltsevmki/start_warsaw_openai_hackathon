@@ -10,10 +10,12 @@ import {
   executeCheckout,
   getWorkflow,
   rejectProposal,
+  rollbackWorkflow,
   respondToAlternative,
   simulateOrderStatus,
 } from '../../api/workflow-api'
 import { DecisionPanel } from '../../components/workflow/DecisionPanel'
+import { WorkflowHistoryGraph } from '../../components/workflow/WorkflowHistoryGraph'
 import {
   AuditTrail,
   ComparisonSection,
@@ -61,6 +63,12 @@ export function WorkflowDetailPage({
     <main className="workflow-page">
       <div className="page-width workflow-stack">
         <WorkflowHeader workflow={view.workflow} />
+        <WorkflowHistoryGraph
+          history={view.history}
+          allowRollback={view.workflow.availableActions.includes('rollback')}
+          busy={busy === 'rollback'}
+          onRollback={(revisionId) => run('rollback', () => rollbackWorkflow(workflowId, revisionId))}
+        />
         <div className="workflow-layout">
           <div className="workflow-main">
             <RequestSummary prompt={view.workflow.prompt} constraints={view.constraints} />

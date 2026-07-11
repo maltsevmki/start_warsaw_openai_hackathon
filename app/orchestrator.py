@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 
 from app import schemas
@@ -32,6 +33,29 @@ class WorkflowRecord:
     checkout: schemas.CheckoutAttempt | None = None
     order: schemas.Order | None = None
     events: list[schemas.DomainEvent] = field(default_factory=list)
+    revisions: list["WorkflowRevisionRecord"] = field(default_factory=list)
+    current_revision_id: str | None = None
+
+
+@dataclass
+class WorkflowSnapshot:
+    workflow: schemas.WorkflowSummary
+    messages: list[str]
+    clarification: schemas.ClarificationQuestion | None
+    guardrail: schemas.PolicyBlock | None
+    constraints: schemas.ShoppingConstraints | None
+    alternatives: list[schemas.Alternative] | None
+    comparison: schemas.ComparisonResult | None
+    proposal: schemas.CheckoutProposal | None
+    approval: schemas.Approval | None
+    checkout: schemas.CheckoutAttempt | None
+    order: schemas.Order | None
+
+
+@dataclass
+class WorkflowRevisionRecord:
+    revision: schemas.WorkflowRevision
+    snapshot: WorkflowSnapshot
 
 
 class WorkflowOrchestrator:
@@ -90,6 +114,7 @@ class WorkflowOrchestrator:
             {"from": None, "to": "created"},
         )
         self._classify_and_continue(record)
+        self._checkpoint(record, "workflow_started", "Request processed")
         return self._view(record)
 
     def get_workflow(self, workflow_id: str) -> schemas.WorkflowView:
@@ -130,6 +155,7 @@ class WorkflowOrchestrator:
             },
         )
         self._classify_and_continue(record)
+        self._checkpoint(record, "clarification_answered", "Clarification answered")
         return self._view(record)
 
     def _format_clarification_answers(
@@ -186,6 +212,7 @@ class WorkflowOrchestrator:
                 {},
             )
             self._transition(record, "cancelled", "Workflow cancelled after alternatives were rejected.")
+            self._checkpoint(record, "alternative_rejected", "Alternative rejected")
             return self._view(record)
         if not alternative_id:
             raise DomainError("alternativeId is required when accepted is true", 422)
@@ -204,6 +231,7 @@ class WorkflowOrchestrator:
             {"alternativeId": alternative.id},
         )
         self._research_and_continue(record)
+        self._checkpoint(record, "alternative_accepted", "Alternative accepted")
         return self._view(record)
 
     def approve_proposal(
@@ -244,6 +272,7 @@ class WorkflowOrchestrator:
         )
         record.workflow.summary = "Proposal approved. Checkout is ready when you are."
         self._refresh_actions(record)
+        self._checkpoint(record, "proposal_approved", "Proposal approved")
         return self._view(record)
 
     def reject_proposal(
@@ -264,6 +293,7 @@ class WorkflowOrchestrator:
             {"reason": reason},
         )
         self._transition(record, "rejected", "Proposal rejected. No purchase was made.")
+        self._checkpoint(record, "proposal_rejected", "Proposal rejected")
         return self._view(record)
 
     def execute_checkout(self, workflow_id: str, approval_id: str) -> schemas.WorkflowView:
@@ -308,6 +338,7 @@ class WorkflowOrchestrator:
                 {"reason": reason},
             )
             self._transition(record, "checkout_failed", f"Checkout failed: {reason.replace('_', ' ')}.")
+            self._checkpoint(record, "checkout_failed", "Checkout failed")
             return self._view(record)
 
         record.proposal.status = "checked_out"
@@ -330,6 +361,7 @@ class WorkflowOrchestrator:
             {"orderId": record.order.id},
         )
         self._transition(record, "tracking", "Order placed and ready for tracking simulation.")
+        self._checkpoint(record, "checkout_completed", "Order placed")
         return self._view(record)
 
     def simulate_order_status(self, order_id: str, status: schemas.OrderStatus) -> schemas.WorkflowView:
@@ -378,6 +410,7 @@ class WorkflowOrchestrator:
         else:
             record.workflow.summary = f"Order is {status.replace('_', ' ')}."
             self._refresh_actions(record)
+        self._checkpoint(record, "tracking_updated", f"Order {status.replace('_', ' ')}")
         return self._view(record)
 
     def cancel_workflow(self, workflow_id: str) -> schemas.WorkflowView:
@@ -386,6 +419,64 @@ class WorkflowOrchestrator:
             raise DomainError("Workflow cannot be cancelled in its current state")
         self._event(record, "workflow.cancelled", "user", "orchestrator", "User cancelled the workflow.", {})
         self._transition(record, "cancelled", "Workflow cancelled. No further action will be taken.")
+        self._checkpoint(record, "workflow_cancelled", "Workflow cancelled")
+        return self._view(record)
+
+    def rollback_workflow(self, workflow_id: str, revision_id: str) -> schemas.WorkflowView:
+        record = self._record(workflow_id)
+        target = next((item for item in record.revisions if item.revision.id == revision_id), None)
+        if not target:
+            raise DomainError("Revision does not belong to this workflow", 404)
+        if record.current_revision_id == revision_id:
+            raise DomainError("Workflow is already at the selected revision", 422)
+
+        source_revision_id = record.current_revision_id
+        source_state = record.workflow.state
+        source_order = record.order.model_copy(deep=True) if record.order else None
+        target_has_same_order = bool(
+            source_order and target.snapshot.order and source_order.id == target.snapshot.order.id
+        )
+        if source_order and not target_has_same_order and source_order.status != "cancelled":
+            self._event(
+                record,
+                "rollback.compensation_recorded",
+                "system",
+                "orchestrator",
+                f"Mock order {source_order.merchant_order_ref} was cancelled before restoring earlier workflow data.",
+                {"orderId": source_order.id, "previousStatus": source_order.status},
+            )
+
+        self._restore_snapshot(record, target.snapshot)
+        record.workflow.updated_at = utcnow()
+        if source_state != record.workflow.state:
+            self._event(
+                record,
+                "workflow.state_changed",
+                "system",
+                "orchestrator",
+                f"Workflow moved from {source_state} to {record.workflow.state} during rollback.",
+                {"from": source_state, "to": record.workflow.state, "reason": "rollback"},
+            )
+        self._event(
+            record,
+            "workflow.rollback_performed",
+            "user",
+            "orchestrator",
+            f"Workflow restored to revision {target.revision.sequence}: {target.revision.label}.",
+            {
+                "fromRevisionId": source_revision_id,
+                "targetRevisionId": revision_id,
+                "restoredState": record.workflow.state,
+            },
+        )
+        record.workflow.summary = f"Restored: {target.revision.summary}"
+        self._checkpoint(
+            record,
+            "rollback",
+            f"Restored revision {target.revision.sequence}",
+            parent_revision_id=revision_id,
+            rollback_from_revision_id=source_revision_id,
+        )
         return self._view(record)
 
     def reset(self) -> None:
@@ -546,8 +637,83 @@ class WorkflowOrchestrator:
         actions = list(self.ACTIONS[record.workflow.state])
         if record.workflow.state == "awaiting_approval" and record.approval:
             actions = ["execute_checkout", "cancel"]
+        if len(record.revisions) > 1 and "rollback" not in actions:
+            actions.append("rollback")
         record.workflow.available_actions = actions
         record.workflow.updated_at = utcnow()
+
+    def _snapshot(self, record: WorkflowRecord) -> WorkflowSnapshot:
+        return WorkflowSnapshot(
+            workflow=deepcopy(record.workflow),
+            messages=list(record.messages),
+            clarification=deepcopy(record.clarification),
+            guardrail=deepcopy(record.guardrail),
+            constraints=deepcopy(record.constraints),
+            alternatives=deepcopy(record.alternatives),
+            comparison=deepcopy(record.comparison),
+            proposal=deepcopy(record.proposal),
+            approval=deepcopy(record.approval),
+            checkout=deepcopy(record.checkout),
+            order=deepcopy(record.order),
+        )
+
+    def _restore_snapshot(self, record: WorkflowRecord, snapshot: WorkflowSnapshot) -> None:
+        record.workflow = deepcopy(snapshot.workflow)
+        record.messages = list(snapshot.messages)
+        record.clarification = deepcopy(snapshot.clarification)
+        record.guardrail = deepcopy(snapshot.guardrail)
+        record.constraints = deepcopy(snapshot.constraints)
+        record.alternatives = deepcopy(snapshot.alternatives)
+        record.comparison = deepcopy(snapshot.comparison)
+        record.proposal = deepcopy(snapshot.proposal)
+        record.approval = deepcopy(snapshot.approval)
+        record.checkout = deepcopy(snapshot.checkout)
+        record.order = deepcopy(snapshot.order)
+
+    def _checkpoint(
+        self,
+        record: WorkflowRecord,
+        action: str,
+        label: str,
+        *,
+        parent_revision_id: str | None = None,
+        rollback_from_revision_id: str | None = None,
+    ) -> None:
+        revision_id = new_id("rev")
+        revision = schemas.WorkflowRevision(
+            id=revision_id,
+            workflowId=record.workflow.id,
+            parentRevisionId=(
+                parent_revision_id if parent_revision_id is not None else record.current_revision_id
+            ),
+            rollbackFromRevisionId=rollback_from_revision_id,
+            sequence=len(record.revisions) + 1,
+            state=record.workflow.state,
+            action=action,
+            label=label,
+            summary=record.workflow.summary,
+            createdAt=utcnow(),
+            isCurrent=True,
+            canRollback=False,
+        )
+        record.revisions.append(WorkflowRevisionRecord(revision=revision, snapshot=self._snapshot(record)))
+        record.current_revision_id = revision_id
+        self._refresh_actions(record)
+        record.revisions[-1].snapshot = self._snapshot(record)
+
+    def _history(self, record: WorkflowRecord) -> schemas.WorkflowHistory:
+        if not record.current_revision_id:
+            raise DomainError("Workflow has no current revision")
+        revisions = []
+        for item in record.revisions:
+            revision = item.revision.model_copy(deep=True)
+            revision.is_current = revision.id == record.current_revision_id
+            revision.can_rollback = revision.id != record.current_revision_id
+            revisions.append(revision)
+        return schemas.WorkflowHistory(
+            currentRevisionId=record.current_revision_id,
+            revisions=revisions,
+        )
 
     def _event(
         self,
@@ -596,4 +762,5 @@ class WorkflowOrchestrator:
             checkout=record.checkout,
             order=record.order,
             events=record.events,
+            history=self._history(record),
         ).model_copy(deep=True)
