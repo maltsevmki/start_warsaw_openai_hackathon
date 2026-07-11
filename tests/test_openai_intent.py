@@ -2,13 +2,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.adapters.openai_intent import IntentAgentOutput, OpenAIIntentAgent
+from app.adapters.openai_intent import IntentAgentOutput, OpenAIIntentAgent, SourcedConstraint
 from app.modules import DemoProfileModule
 from app.settings import Settings
 from app.factories import build_intent_module
 
 
 HAPPY_PROMPT = "Find me a monitor under 1000 PLN for my MacBook by tomorrow."
+
+
+def sourced(value: str, evidence: str) -> SourcedConstraint:
+    return SourcedConstraint(value=value, evidence=evidence)
 
 
 class FakeResponses:
@@ -33,12 +37,16 @@ def valid_monitor_output():
     return IntentAgentOutput(
         status="valid_request",
         product_category="monitor",
+        product_category_evidence="monitor",
         budget_max_amount=1000,
+        budget_max_evidence="1000 PLN",
         delivery_deadline="tomorrow",
-        compatibility=["MacBook"],
+        delivery_deadline_evidence="tomorrow",
+        compatibility=[sourced("MacBook", "MacBook")],
         must_have=[],
         nice_to_have=[],
         required_return_days=None,
+        required_return_days_evidence=None,
         forbidden=[],
         missing_fields=[],
         question_text=None,
@@ -56,12 +64,16 @@ def shoe_clarification_output():
     return IntentAgentOutput(
         status="need_clarification",
         product_category="shoes",
+        product_category_evidence="shoes",
         budget_max_amount=None,
+        budget_max_evidence=None,
         delivery_deadline="tomorrow",
+        delivery_deadline_evidence="tomorrow",
         compatibility=[],
         must_have=[],
         nice_to_have=[],
         required_return_days=None,
+        required_return_days_evidence=None,
         forbidden=[],
         missing_fields=["shoe_size"],
         question_text="What EU shoe size should I search for?",
@@ -85,6 +97,98 @@ def test_openai_intent_agent_uses_structured_output():
     assert result.constraints.product_category == "monitor"
     assert result.constraints.budget_max.amount == 1000
     assert client.responses.calls[0]["text_format"] is IntentAgentOutput
+
+
+def test_openai_intent_discards_profile_leakage_and_ungrounded_requirements():
+    output = IntentAgentOutput(
+        status="valid_request",
+        product_category="MacBook",
+        product_category_evidence="MacBook",
+        budget_max_amount=200,
+        budget_max_evidence="200 PLN",
+        delivery_deadline="tomorrow",
+        delivery_deadline_evidence="tomorrow",
+        compatibility=[
+            sourced("MacBook", "MacBook"),
+            sourced("USB-C", "USB-C"),
+            sourced("external displays via USB-C or HDMI", "USB-C or HDMI"),
+        ],
+        must_have=[
+            sourced("M4 chip", "M4"),
+            sourced("USB-C port", "USB-C"),
+        ],
+        nice_to_have=[],
+        required_return_days=None,
+        required_return_days_evidence=None,
+        forbidden=[],
+        missing_fields=[],
+        question_text=None,
+        expected_field=None,
+        examples=[],
+        policy_code=None,
+        policy_message=None,
+        can_suggest_safer_alternative=False,
+        confidence=0.9,
+        extracted_summary="Looking for an M4 MacBook under 200 PLN by tomorrow.",
+    )
+    client = FakeOpenAI(output=output)
+    agent = OpenAIIntentAgent(api_key="", client=client)
+
+    result = agent.classify(
+        "I want to buy a MacBook under 200 PLN, shipped tomorrow.",
+        ["It has to be on M4."],
+        DemoProfileModule().get_profile(),
+    )
+
+    assert result.constraints.budget_max.amount == 200
+    assert result.constraints.delivery_deadline == "tomorrow"
+    assert result.constraints.must_have == ["M4 chip"]
+    assert result.constraints.compatibility == ["MacBook"]
+    assert "USB-C port" not in result.constraints.must_have
+    request_input = client.responses.calls[0]["input"]
+    assert "Known user/device facts" not in request_input
+    assert "Prefers external displays with USB-C or HDMI" not in request_input
+
+
+def test_openai_intent_keeps_explicit_usb_c_and_macbook_compatibility():
+    output = IntentAgentOutput(
+        status="valid_request",
+        product_category="monitor",
+        product_category_evidence="monitor",
+        budget_max_amount=None,
+        budget_max_evidence=None,
+        delivery_deadline=None,
+        delivery_deadline_evidence=None,
+        compatibility=[
+            sourced("USB-C", "USB-C"),
+            sourced("MacBook", "MacBook"),
+        ],
+        must_have=[sourced("USB-C", "USB-C")],
+        nice_to_have=[],
+        required_return_days=None,
+        required_return_days_evidence=None,
+        forbidden=[],
+        missing_fields=[],
+        question_text=None,
+        expected_field=None,
+        examples=[],
+        policy_code=None,
+        policy_message=None,
+        can_suggest_safer_alternative=False,
+        confidence=0.95,
+        extracted_summary="Looking for a USB-C monitor for a MacBook.",
+    )
+    client = FakeOpenAI(output=output)
+    agent = OpenAIIntentAgent(api_key="", client=client)
+
+    result = agent.classify(
+        "Find a USB-C monitor for my MacBook.",
+        [],
+        DemoProfileModule().get_profile(),
+    )
+
+    assert result.constraints.compatibility == ["USB-C", "MacBook"]
+    assert result.constraints.must_have == ["USB-C"]
 
 
 def test_deterministic_guardrail_runs_before_openai():
