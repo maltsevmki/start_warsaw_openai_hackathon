@@ -423,6 +423,29 @@ a { color: inherit; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 
+@media (min-width: 981px) {
+  .history-intro { font-size: 13px; line-height: 1.6; }
+  .revision-tree { padding: 8px 8px 16px; }
+  .revision-node { grid-template-columns: 32px minmax(0, 1fr); gap: 12px; width: 310px; min-height: 104px; border-radius: 13px; padding: 14px; }
+  .revision-sequence { width: 32px; height: 32px; font-size: 13px; }
+  .revision-node-copy { gap: 6px; }
+  .revision-node-title strong { font-size: 14px; }
+  .revision-node-summary { font-size: 12px; line-height: 1.5; }
+  .revision-node-meta { gap: 5px 9px; font-size: 11px; }
+  .revision-detail-hint { gap: 4px; font-size: 11px; }
+  .revision-jump { top: -10px; padding: 4px 7px; font-size: 10px; }
+  .revision-selection { padding-top: 18px; }
+  .revision-selection > div { gap: 5px; }
+  .revision-selection > div strong { font-size: 14px; }
+  .revision-selection > div small { font-size: 12px; line-height: 1.5; }
+  .revision-decision-context { gap: 7px; padding: 10px 0 3px 14px; }
+  .revision-decision-context > strong { font-size: 16px !important; }
+  .revision-decision-context > p { font-size: 12px; line-height: 1.6; }
+  .revision-decision-facts dt { font-size: 11px; }
+  .revision-decision-facts dd { margin-top: 4px; font-size: 12px; line-height: 1.45; }
+  .current-revision-label { font-size: 12px; }
+}
+
 @media (max-width: 980px) {
   .launcher-hero { grid-template-columns: 1fr; gap: 42px; padding: 68px 0 76px; }
   .hero-copy { max-width: 720px; }
