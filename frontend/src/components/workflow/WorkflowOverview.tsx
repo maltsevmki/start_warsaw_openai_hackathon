@@ -3,6 +3,7 @@ import {
   Check,
   CircleDot,
   Clock3,
+  ExternalLink,
   LoaderCircle,
   LockKeyhole,
   PackageCheck,
@@ -143,15 +144,22 @@ export function ComparisonSection({
                   {best && <span className="recommended-label"><PackageCheck size={14} /> AI pick</span>}
                   {selected && <span className="selected-label">Your choice</span>}
                 </div>
+                <p className="offer-merchant">{offer.merchantName}</p>
                 <div className="reason-list">
                   {offer.reasons.map((reason) => <span key={reason} className="positive">✓ {reason}</span>)}
                   {offer.tradeoffs.map((tradeoff) => <span key={tradeoff} className="tradeoff">△ {tradeoff}</span>)}
+                  {(offer.riskFlags ?? []).map((risk) => <span key={risk} className="tradeoff">? {titleCase(risk)}</span>)}
                   {offer.disqualifiers.map((item) => <span key={item} className="negative">× {item}</span>)}
                 </div>
+                {offer.productUrl && (
+                  <a className="source-link" href={offer.productUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink size={13} /> View verified merchant page
+                  </a>
+                )}
               </div>
               <div className="offer-action">
                 <strong>{formatMoney(offer.total)}</strong>
-                {canSelect && (
+                {canSelect && offer.disqualifiers.length === 0 && (
                   <button type="button" disabled={Boolean(selectingOfferId) || selected} onClick={() => onSelect(offer.offerId)}>
                     {selectingOfferId === offer.offerId ? <LoaderCircle className="spin" size={14} /> : selected ? 'Selected' : 'Choose'}
                   </button>

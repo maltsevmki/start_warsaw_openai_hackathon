@@ -1,17 +1,18 @@
-# Agent Commerce Mock API
+# Agent Commerce API
 
-A fully mocked FastAPI implementation of the agent-commerce workflow described in `02-module-specs-and-interactions.md`. It is ready for a frontend or Swagger-based demo, while keeping each domain capability behind an explicit class contract so teammates can replace the mocks incrementally.
+A FastAPI agent-commerce workflow with live OpenAI web research for real products. Search results are returned through the existing Pydantic contracts, checked against the web sources consulted by the model, compared deterministically, and shown to the user before the existing explicit-approval boundary.
 
 The demo includes:
 
 - intent extraction, clarification, and policy guardrails;
-- a 13-offer local catalog covering monitors, headphones, shoes, and USB-C hubs;
+- OpenAI Responses API product research using required live web search;
+- direct merchant URLs and visible source evidence for every researched offer;
 - deterministic comparison, proposal generation, and stable proposal hashing;
 - explicit approval bound to one exact proposal version and hash;
 - checkout revalidation, mock payment, and an intentional out-of-stock failure;
 - order tracking simulation and a user-visible audit trail;
 - permissive CORS for a local frontend.
-- a provider-based intent boundary with mock and OpenAI structured-output adapters.
+- a provider-based intent boundary with deterministic and OpenAI structured-output adapters.
 
 ## Setup
 
@@ -32,17 +33,23 @@ uvicorn app.main:app --reload
 - Health check: http://127.0.0.1:8000/health
 - Demo prompts: http://127.0.0.1:8000/api/demo/scenarios
 
-Workflow state is held in memory for predictable demos. Restarting the process or calling `POST /api/demo/reset` clears it. The catalog itself lives in `app/fixtures/catalog.json`.
+Workflow state is held in memory. Restarting the process or calling `POST /api/demo/reset` clears it. Live offers are cached in memory so the selected offer remains available to proposal and checkout revalidation code.
 
-## OpenAI intent agent
+## Live product research
 
-The default remains fully offline. To enable the OpenAI-backed intent extractor, copy the example configuration and add a newly created API key:
+Copy the example configuration and add a newly created API key:
 
 ```bash
 cp .env.example .env
 ```
 
-Then set these values in `.env`:
+`CATALOG_PROVIDER=openai` is the default. Each product search uses the Responses API with the hosted `web_search` tool, live external access, Polish location context, and a strict Pydantic structured output. Search is required rather than optional. Returned product and evidence URLs are rejected unless they occur in the web tool's consulted-source list.
+
+There is no runtime fixture catalog or fallback. If OpenAI product research is unavailable, the API returns a visible service error rather than inventing or substituting canned offers. Small in-memory records used by the automated test suite live under `tests/` only.
+
+## OpenAI intent agent
+
+To enable the OpenAI-backed intent extractor as well, set:
 
 ```dotenv
 INTENT_PROVIDER=openai
@@ -51,7 +58,7 @@ OPENAI_INTENT_MODEL=gpt-5-mini
 OPENAI_FALLBACK_TO_MOCK=true
 ```
 
-The key is read only from the environment and `.env` is ignored by Git. Hard application-policy checks run deterministically before the model. Safe requests, including incomplete ones, are classified with a strict Pydantic structured output; application invariants are checked again afterward. When fallback is enabled, temporary OpenAI failures use the existing offline extractor so the demo stays usable. The `prompt.classified` audit event records whether the result came from `openai`, `deterministic`, or `fallback` processing.
+The key is read only from the environment and `.env` is ignored by Git. Hard application-policy checks run deterministically before the model. Safe requests, including incomplete ones, are classified with a strict Pydantic structured output; application invariants are checked again afterward. When intent fallback is enabled, temporary intent-extraction failures use the offline extractor. Product research has no canned-data fallback.
 
 ## Frontend API
 
@@ -85,7 +92,7 @@ Clarifications include a renderable `fields` array. The existing free-text reply
 
 The backend rejects stale question IDs, unknown or duplicate fields, missing required fields, and invalid numeric values before reclassifying the request.
 
-Every completed user-visible mutation adds an immutable entry to `history.revisions`. Send a prior `revisionId` to the rollback endpoint to restore its complete canonical snapshot. The restore is recorded as a new child revision, so abandoned branches remain visible and the domain-event audit log stays append-only. In the fully mocked checkout flow, restoring a pre-order revision records a compensating mock cancellation before clearing order data; a real commerce adapter must replace that rule with an actual merchant-side compensation or reject the rollback.
+Every completed user-visible mutation adds an immutable entry to `history.revisions`. Each revision includes structured `decision` context when applicable: the clarification question, alternative choices, exact approval terms, checkout failure, policy stop, or order status that the user saw at that point. Send a prior `revisionId` to the rollback endpoint to restore its complete canonical snapshot. The restore is recorded as a new child revision, so abandoned branches remain visible and the domain-event audit log stays append-only. In the fully mocked checkout flow, restoring a pre-order revision records a compensating mock cancellation before clearing order data; a real commerce adapter must replace that rule with an actual merchant-side compensation or reject the rollback.
 
 ## Required demo scenarios
 
@@ -135,7 +142,6 @@ The contract and HTTP suites exercise all required scenarios, every specified mo
 
 ```text
 app/
-  fixtures/catalog.json  # Local merchant offers and demo behaviors
   adapters/              # OpenAI and future external provider implementations
   domain/                # Provider-neutral domain result types
   ports/                 # Contracts consumed by orchestration

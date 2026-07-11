@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clipboard,
   CreditCard,
+  ExternalLink,
   LoaderCircle,
   Package,
   RefreshCw,
@@ -220,6 +221,7 @@ function ProposalCard({ view, actions, busy, error, onApprove, onReject, onCance
     <section className="decision-card proposal-card">
       <div className="proposal-banner"><ShieldCheck size={20} /><span><strong>Ready for your approval</strong><small>The agent cannot purchase until you approve these exact terms.</small></span></div>
       <div className="proposal-title"><div><p className="eyebrow">Immutable proposal · v{proposal.version}</p><h2>{proposal.title}</h2><p>{proposal.merchantName} · Quantity {proposal.quantity}</p></div><strong>{formatMoney(proposal.total)}</strong></div>
+      {proposal.productUrl && <a className="source-link proposal-source" href={proposal.productUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Open verified merchant offer</a>}
       <div className="proposal-facts">
         <div><span>Delivery</span><strong>{proposal.delivery.label}</strong><small>{proposal.delivery.earliest} – {proposal.delivery.latest}</small></div>
         <div><span>Returns</span><strong>{proposal.returns.label}</strong><small>{proposal.returns.returnable ? `${proposal.returns.days} days` : 'Not returnable'}</small></div>

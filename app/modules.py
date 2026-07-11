@@ -5,7 +5,6 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -71,9 +70,18 @@ class DemoProfileModule:
 
 
 class IntentGuardrailModule:
+    LOWEST_PRICE_PHRASES = (
+        "cheapest",
+        "lowest price",
+        "lowest-priced",
+        "least expensive",
+        "most affordable",
+    )
     CATEGORY_KEYWORDS = {
         "monitor": ("monitor", "display", "screen"),
         "headphones": ("headphone", "headphones", "headset"),
+        "smartphone": ("smartphone", "iphone", "android phone", "mobile phone"),
+        "toothbrush": ("toothbrush", "toothbrushes"),
         "shoes": ("shoe", "shoes", "sneaker", "sneakers"),
         "clothing": ("shirt", "jacket", "trousers", "dress", "clothing", "clothes"),
         "usb_c_hub": ("usb-c hub", "usb c hub", "hub", "dongle"),
@@ -109,12 +117,21 @@ class IntentGuardrailModule:
                 ["Size M", "EU 40"],
             )
         if category is None:
+            if constraints.budget_max or self.requests_lowest_price(constraints):
+                return self.clarification_result(
+                    constraints,
+                    "product_category",
+                    "What kind of product would you like?",
+                    ["Electric toothbrush", "Noise-cancelling headphones"],
+                )
             return self.clarification_result(
                 constraints,
                 "product_category_and_budget",
                 "What kind of product would you like, and what is your maximum budget?",
                 ["Headphones under 300 PLN", "A desk lamp under 150 PLN"],
             )
+        if self.needs_budget(constraints):
+            return self.budget_clarification_result(constraints)
 
         summary_bits = [f"Looking for {category.replace('_', ' ')}"]
         if constraints.budget_max:
@@ -126,6 +143,27 @@ class IntentGuardrailModule:
             constraints=constraints,
             summary=", ".join(summary_bits) + ".",
             confidence=0.97,
+        )
+
+    @classmethod
+    def requests_lowest_price(cls, constraints: schemas.ShoppingConstraints) -> bool:
+        lower = constraints.query.lower()
+        return "cheapest" in constraints.must_have or any(
+            phrase in lower for phrase in cls.LOWEST_PRICE_PHRASES
+        )
+
+    @classmethod
+    def needs_budget(cls, constraints: schemas.ShoppingConstraints) -> bool:
+        return constraints.budget_max is None and not cls.requests_lowest_price(constraints)
+
+    def budget_clarification_result(
+        self, constraints: schemas.ShoppingConstraints
+    ) -> ClassificationResult:
+        return self.clarification_result(
+            constraints,
+            "budget_max",
+            "What is the maximum amount you want to spend?",
+            ["Maximum 150 PLN", "Up to 300 PLN"],
         )
 
     def check_guardrails(self, text: str) -> ClassificationResult | None:
@@ -233,6 +271,15 @@ class IntentGuardrailModule:
                     placeholder="300",
                 ),
             ]
+        if expected_field == "budget_max":
+            return [
+                schemas.ClarificationField(
+                    name="budget_max",
+                    label="Maximum budget (PLN)",
+                    inputType="number",
+                    placeholder="300",
+                )
+            ]
         return [
             schemas.ClarificationField(
                 name=expected_field,
@@ -248,7 +295,7 @@ class IntentGuardrailModule:
             None,
         )
         budget_match = re.search(
-            r"(?:under|below|up to|max(?:imum)?(?: of)?)\s*(?:pln\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:pln|zł|zl)?",
+            r"(?:under|below|up to|max(?:imum)?(?:\s+budget)?(?:\s*\(pln\))?(?:\s+of)?|budget(?:\s+of)?)\s*:?\s*(?:pln\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:pln|zł|zl)?",
             lower,
         )
         budget = (
@@ -268,7 +315,7 @@ class IntentGuardrailModule:
         nice_to_have: list[str] = []
         if "noise cancelling" in lower or "noise-cancelling" in lower:
             must_have.append("noise cancelling")
-        if "cheapest" in lower:
+        if any(phrase in lower for phrase in self.LOWEST_PRICE_PHRASES):
             must_have.append("cheapest")
         size = re.search(r"\b(?:size\s*)?(3[5-9]|4[0-9]|5[0-2])\b", lower)
         if size and category == "shoes":
@@ -296,19 +343,16 @@ class RevalidateResult:
     reason: str | None = None
 
 
-class MockCatalogModule:
+class ProductCatalogModule:
     def __init__(
         self,
-        fixture_path: Path | None = None,
         settings: Settings | None = None,
         research_agent: CatalogModule | None = None,
     ):
-        path = fixture_path or Path(__file__).parent / "fixtures" / "catalog.json"
-        raw = json.loads(path.read_text())
-        self.offers = [schemas.Offer.model_validate(item) for group in raw.values() for item in group]
-        self.by_id = {offer.id: offer for offer in self.offers}
+        self.offers: list[schemas.Offer] = []
+        self.by_id: dict[str, schemas.Offer] = {}
         self._research_agent = research_agent
-        if self._research_agent is None:
+        if self._research_agent is None and settings is not None:
             self._research_agent = self._build_research_agent(settings)
 
     def search(
@@ -316,17 +360,7 @@ class MockCatalogModule:
     ) -> CatalogSearchResult:
         if self._research_agent:
             return self._research_agent.search(constraints, profile)
-        return self.search_fixtures(constraints, profile)
-
-    def search_fixtures(
-        self, constraints: schemas.ShoppingConstraints, profile: schemas.DemoUserProfile
-    ) -> CatalogSearchResult:
-        candidates = [
-            self._for_deadline(offer, constraints.delivery_deadline)
-            for offer in self.offers
-            if offer.category == constraints.product_category
-        ]
-        return self.evaluate_offers(constraints, candidates)
+        raise DomainError("Live product research is not configured. Set OPENAI_API_KEY and try again.", 503)
 
     def evaluate_offers(
         self,
@@ -334,6 +368,7 @@ class MockCatalogModule:
         offers: list[schemas.Offer],
         *,
         cache: bool = False,
+        include_alternatives: bool = True,
     ) -> CatalogSearchResult:
         candidates = [self._for_deadline(offer, constraints.delivery_deadline) for offer in offers]
         if cache:
@@ -341,7 +376,7 @@ class MockCatalogModule:
         exact = [offer for offer in candidates if self._is_exact(offer, constraints)]
         if exact:
             return CatalogSearchResult(new_id("search"), "offers_found", candidates, [])
-        alternatives = self._alternatives(constraints, candidates)
+        alternatives = self._alternatives(constraints, candidates) if include_alternatives else []
         return CatalogSearchResult(
             new_id("search"),
             "alternatives_found" if alternatives else "no_results",
@@ -349,12 +384,10 @@ class MockCatalogModule:
             alternatives,
         )
 
-    def _build_research_agent(self, settings: Settings | None) -> CatalogModule | None:
+    def _build_research_agent(self, settings: Settings) -> CatalogModule | None:
         from app.factories import build_catalog_research_module
-        from app.settings import Settings
 
-        configured_settings = settings or Settings.from_env()
-        return build_catalog_research_module(configured_settings, self)
+        return build_catalog_research_module(settings, self)
 
     def get_offer(self, offer_id: str) -> schemas.Offer | None:
         offer = self.by_id.get(offer_id)
@@ -414,27 +447,53 @@ class MockCatalogModule:
         self, constraints: schemas.ShoppingConstraints, offers: list[schemas.Offer]
     ) -> list[schemas.Alternative]:
         alternatives: list[schemas.Alternative] = []
-        if constraints.product_category == "headphones" and constraints.delivery_deadline == "today":
+        if constraints.delivery_deadline == "today":
             later = constraints.model_copy(deep=True)
             later.delivery_deadline = "tomorrow"
-            alternatives.append(
-                schemas.Alternative(
-                    id="alt_delivery_tomorrow",
-                    reason="later_delivery",
-                    message="No exact option meets both 200 PLN and today. The Soundcore Q20i is 189 PLN and arrives tomorrow.",
-                    adjustedConstraints=later,
-                )
+            later_match = next(
+                (
+                    offer
+                    for offer in offers
+                    if self._is_exact(self._for_deadline(offer, "tomorrow"), later)
+                ),
+                None,
             )
-            higher = constraints.model_copy(deep=True)
-            higher.budget_max = schemas.Money(amount=300)
-            alternatives.append(
-                schemas.Alternative(
-                    id="alt_budget_300",
-                    reason="higher_budget",
-                    message="Raise the budget to 300 PLN for the JBL Tune 770NC with delivery today.",
-                    adjustedConstraints=higher,
+            if later_match:
+                alternatives.append(
+                    schemas.Alternative(
+                        id="alt_delivery_tomorrow",
+                        reason="later_delivery",
+                        message=(
+                            f"No exact option meets today's deadline. {later_match.title} "
+                            "is the closest verified match and arrives tomorrow."
+                        ),
+                        adjustedConstraints=later,
+                    )
                 )
-            )
+
+        if constraints.budget_max:
+            otherwise_matching: list[schemas.Offer] = []
+            for offer in offers:
+                relaxed = constraints.model_copy(deep=True)
+                relaxed.budget_max = None
+                if self._is_exact(offer, relaxed) and offer.total.amount > constraints.budget_max.amount:
+                    otherwise_matching.append(offer)
+            if otherwise_matching:
+                closest = min(otherwise_matching, key=lambda offer: offer.total.amount)
+                rounded_budget = int((closest.total.amount + 49) // 50 * 50)
+                higher = constraints.model_copy(deep=True)
+                higher.budget_max = schemas.Money(amount=rounded_budget)
+                alternatives.append(
+                    schemas.Alternative(
+                        id=f"alt_budget_{rounded_budget}",
+                        reason="higher_budget",
+                        message=(
+                            f"Raise the budget to {rounded_budget} PLN for the closest verified "
+                            f"match, {closest.title}."
+                        ),
+                        adjustedConstraints=higher,
+                    )
+                )
         return alternatives
 
 
@@ -445,7 +504,7 @@ class ComparisonModule:
         settings: Settings | None = None,
     ):
         self._rationale = rationale
-        if self._rationale is None:
+        if self._rationale is None and settings is not None:
             try:
                 self._rationale = self._build_rationale(settings)
             except Exception:
@@ -460,28 +519,40 @@ class ComparisonModule:
         profile: schemas.DemoUserProfile,
         offers: list[schemas.Offer],
     ) -> schemas.ComparisonResult:
-        lowest = min((o.total.amount for o in offers if o.stock_status != "out_of_stock"), default=0)
         ranked: list[schemas.RankedOffer] = []
+        required_size = next(
+            (item for item in constraints.must_have if item.startswith("size ")), None
+        )
+        lowest_price_requested = IntentGuardrailModule.requests_lowest_price(constraints)
+        has_price_context = constraints.budget_max is not None or lowest_price_requested
+        eligible_offers = [
+            offer
+            for offer in offers
+            if not self._hard_disqualifiers(offer, constraints, required_size)
+        ]
+        lowest = min((offer.total.amount for offer in eligible_offers), default=0)
         for offer in offers:
             score = 0.0
             reasons: list[str] = []
             tradeoffs: list[str] = []
-            disqualifiers: list[str] = []
+            disqualifiers = self._hard_disqualifiers(offer, constraints, required_size)
 
-            if offer.stock_status == "out_of_stock":
-                disqualifiers.append("Out of stock")
-            if constraints.compatibility and offer.compatibility.macbook == "no":
-                disqualifiers.append("Incompatible with MacBook")
-
-            if "cheapest" in constraints.must_have:
+            if lowest_price_requested:
                 budget_score = 30 if offer.total.amount == lowest else max(0, 30 - (offer.total.amount - lowest) / 8)
+                if offer.total.amount == lowest and not disqualifiers:
+                    reasons.append("Lowest-priced eligible offer")
+                else:
+                    tradeoffs.append("Costs more than the lowest-priced eligible offer")
+            elif constraints.budget_max:
+                budget_score = 30 if offer.total.amount <= constraints.budget_max.amount else 0
+                if budget_score == 30:
+                    reasons.append("Within the maximum budget")
+                else:
+                    tradeoffs.append("Exceeds the maximum budget")
             else:
-                budget_score = 30 if not constraints.budget_max or offer.total.amount <= constraints.budget_max.amount else 0
+                budget_score = 0
+                tradeoffs.append("No maximum budget or lowest-price objective was provided")
             score += budget_score
-            if budget_score == 30:
-                reasons.append("Meets the budget target")
-            else:
-                tradeoffs.append("Costs more than the requested budget or lowest option")
 
             if offer.delivery.meets_deadline:
                 score += 25
@@ -512,18 +583,31 @@ class ComparisonModule:
                     rank=0,
                     score=round(score, 1),
                     title=offer.title,
+                    merchantName=offer.merchant_name,
+                    productUrl=offer.product_url,
+                    evidenceSources=offer.evidence_sources,
                     total=offer.total,
                     reasons=reasons,
                     tradeoffs=tradeoffs,
                     disqualifiers=disqualifiers,
+                    riskFlags=offer.risk_flags,
                 )
             )
 
-        ranked.sort(key=lambda item: item.score, reverse=True)
+        if lowest_price_requested:
+            ranked.sort(
+                key=lambda item: (
+                    bool(item.disqualifiers),
+                    item.total.amount,
+                    -item.score,
+                )
+            )
+        else:
+            ranked.sort(key=lambda item: item.score, reverse=True)
         for index, item in enumerate(ranked, start=1):
             item.rank = index
         viable = [item for item in ranked if not item.disqualifiers and item.score >= 50]
-        best = viable[0] if viable else None
+        best = viable[0] if viable and has_price_context else None
         confidence = min(0.99, (best.score / 100) if best else 0.0)
         recommendation = "proceed" if best and confidence >= 0.75 else "ask_user" if best else "stop"
         summary = (
@@ -545,8 +629,41 @@ class ComparisonModule:
             recommendation=recommendation,
             summary=summary,
             rankedOffers=ranked,
-            missingEvidence=[] if best else ["No offer satisfies all hard requirements"],
+            missingEvidence=(
+                best.risk_flags
+                if best
+                else (
+                    ["Maximum budget or lowest-price objective is required"]
+                    if not has_price_context
+                    else ["No offer satisfies all hard requirements"]
+                )
+            ),
         )
+
+    @staticmethod
+    def _hard_disqualifiers(
+        offer: schemas.Offer,
+        constraints: schemas.ShoppingConstraints,
+        required_size: str | None,
+    ) -> list[str]:
+        disqualifiers: list[str] = []
+        if offer.stock_status == "out_of_stock":
+            disqualifiers.append("Out of stock")
+        if constraints.delivery_deadline and not offer.delivery.meets_deadline:
+            disqualifiers.append("Misses the required delivery deadline")
+        if constraints.budget_max and offer.total.amount > constraints.budget_max.amount:
+            disqualifiers.append("Exceeds the maximum budget")
+        if constraints.compatibility and offer.compatibility.macbook != "yes":
+            disqualifiers.append(
+                "Incompatible with MacBook"
+                if offer.compatibility.macbook == "no"
+                else "MacBook compatibility is unverified"
+            )
+        if constraints.required_return_days and offer.returns.days < constraints.required_return_days:
+            disqualifiers.append("Return window is shorter than required")
+        if required_size and required_size not in offer.title.lower():
+            disqualifiers.append(f"Does not match required {required_size}")
+        return disqualifiers
 
     @staticmethod
     def _build_rationale(settings: Settings | None) -> ComparisonRationaleModule | None:
@@ -584,6 +701,10 @@ class ProposalModule:
             "offerId": offer.id,
             "merchantName": offer.merchant_name,
             "title": offer.title,
+            "productUrl": offer.product_url,
+            "evidenceSources": [
+                source.model_dump(by_alias=True) for source in offer.evidence_sources
+            ],
             "quantity": 1,
             "lineItems": [
                 {"label": "Item", "amount": offer.price.model_dump(by_alias=True)},
@@ -670,7 +791,7 @@ class CheckoutResult:
 
 
 class MockCheckoutModule:
-    def __init__(self, catalog: MockCatalogModule, gateway: "PaymentGateway | None" = None):
+    def __init__(self, catalog: ProductCatalogModule, gateway: "PaymentGateway | None" = None):
         self.catalog = catalog
         if gateway is None:
             from app.payments import default_gateway

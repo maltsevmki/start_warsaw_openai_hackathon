@@ -10,13 +10,15 @@ from app.modules import (
     ConsentAuditModule,
     DemoProfileModule,
     DomainError,
-    MockCatalogModule,
+    IntentGuardrailModule,
+    ProductCatalogModule,
     MockCheckoutModule,
     MockTrackingModule,
     ProposalModule,
     new_id,
     utcnow,
 )
+from app.settings import Settings
 
 
 @dataclass
@@ -78,11 +80,13 @@ class WorkflowOrchestrator:
         "cancelled": [],
     }
 
-    def __init__(self, intent=None):
+    def __init__(self, intent=None, settings: Settings | None = None, catalog: ProductCatalogModule | None = None):
         self.profile = DemoProfileModule()
-        self.intent = intent or build_intent_module()
-        self.catalog = MockCatalogModule()
-        self.comparison = ComparisonModule()
+        self.intent = intent or (
+            build_intent_module(settings) if settings is not None else IntentGuardrailModule()
+        )
+        self.catalog = catalog or ProductCatalogModule(settings=settings)
+        self.comparison = ComparisonModule(settings=settings)
         self.proposals = ProposalModule()
         self.consent = ConsentAuditModule()
         self.checkout = MockCheckoutModule(self.catalog)
@@ -303,7 +307,12 @@ class WorkflowOrchestrator:
             raise DomainError("The offer cannot be changed after approval", 409)
         if not record.comparison or not record.proposal:
             raise DomainError("Workflow has no comparison or current proposal")
-        top_offer_ids = [item.offer_id for item in record.comparison.ranked_offers[:3]]
+        selectable = [
+            item
+            for item in record.comparison.ranked_offers[:3]
+            if not item.disqualifiers and item.score >= 50
+        ]
+        top_offer_ids = [item.offer_id for item in selectable]
         if offer_id not in top_offer_ids:
             raise DomainError("Offer must belong to the current top three", 422)
         if record.proposal.offer_id == offer_id:
@@ -526,6 +535,16 @@ class WorkflowOrchestrator:
     def _classify_and_continue(self, record: WorkflowRecord) -> None:
         profile = self.profile.get_profile()
         result = self.intent.classify(record.workflow.prompt, record.messages, profile)
+        if (
+            result.status == "valid_request"
+            and result.constraints
+            and IntentGuardrailModule.needs_budget(result.constraints)
+        ):
+            source = result.source
+            confidence = result.confidence
+            result = IntentGuardrailModule().budget_clarification_result(result.constraints)
+            result.source = source
+            result.confidence = confidence
         self._event(
             record,
             "prompt.classified",
@@ -584,7 +603,7 @@ class WorkflowOrchestrator:
     def _research_and_continue(self, record: WorkflowRecord) -> None:
         if not record.constraints:
             raise DomainError("Cannot research without shopping constraints")
-        self._transition(record, "researching", "Searching the mocked catalog.")
+        self._transition(record, "researching", "Searching for products.")
         search = self.catalog.search(record.constraints, self.profile.get_profile())
         self._event(
             record,
@@ -592,7 +611,18 @@ class WorkflowOrchestrator:
             "module",
             "catalog",
             f"Catalog search returned {len(search.offers)} candidate offers ({search.status}).",
-            {"searchId": search.search_id, "status": search.status, "offerCount": len(search.offers)},
+            {
+                "searchId": search.search_id,
+                "status": search.status,
+                "offerCount": len(search.offers),
+                "sourceCount": len(
+                    {
+                        source.url
+                        for offer in search.offers
+                        for source in offer.evidence_sources
+                    }
+                ),
+            },
         )
         if search.status == "alternatives_found":
             record.alternatives = search.alternatives
@@ -604,7 +634,7 @@ class WorkflowOrchestrator:
             return
         if search.status == "no_results":
             record.alternatives = []
-            self._transition(record, "no_exact_match", "No mocked catalog offer matches this request.")
+            self._transition(record, "no_exact_match", "No offer matches this request.")
             return
 
         record.alternatives = None
@@ -733,6 +763,7 @@ class WorkflowOrchestrator:
             action=action,
             label=label,
             summary=record.workflow.summary,
+            decision=self._revision_decision(record),
             createdAt=utcnow(),
             isCurrent=True,
             canRollback=False,
@@ -741,6 +772,128 @@ class WorkflowOrchestrator:
         record.current_revision_id = revision_id
         self._refresh_actions(record)
         record.revisions[-1].snapshot = self._snapshot(record)
+
+    def _revision_decision(
+        self, record: WorkflowRecord
+    ) -> schemas.WorkflowRevisionDecision | None:
+        if record.guardrail:
+            return schemas.WorkflowRevisionDecision(
+                kind="policy",
+                title=record.guardrail.message,
+                description="The request stopped before product research or checkout.",
+                facts=[
+                    schemas.WorkflowRevisionFact(
+                        label="Policy code",
+                        value=record.guardrail.code.replace("_", " ").title(),
+                    )
+                ],
+            )
+        if record.clarification:
+            requested_fields = record.clarification.fields or []
+            facts = [
+                schemas.WorkflowRevisionFact(
+                    label="Required information",
+                    value=", ".join(field.label for field in requested_fields if field.required)
+                    or record.clarification.expected_field.replace("_", " ").title(),
+                )
+            ]
+            if record.clarification.examples:
+                facts.append(
+                    schemas.WorkflowRevisionFact(
+                        label="Examples",
+                        value=" · ".join(record.clarification.examples),
+                    )
+                )
+            return schemas.WorkflowRevisionDecision(
+                kind="clarification",
+                title=record.clarification.text,
+                description="The agent paused research until the user answers this question.",
+                facts=facts,
+            )
+        if record.alternatives:
+            return schemas.WorkflowRevisionDecision(
+                kind="alternative",
+                title="Which constraint change should the agent use?",
+                description="No exact match was found; each option changes the original request explicitly.",
+                facts=[
+                    schemas.WorkflowRevisionFact(
+                        label=item.reason.replace("_", " ").title(),
+                        value=item.message,
+                    )
+                    for item in record.alternatives
+                ],
+            )
+        if record.checkout and record.checkout.status == "failed":
+            reason = record.checkout.failure_reason or "unknown"
+            return schemas.WorkflowRevisionDecision(
+                kind="checkout_failure",
+                title=f"Checkout stopped: {reason.replace('_', ' ')}",
+                description="No new order was created by this checkout attempt.",
+                facts=[
+                    schemas.WorkflowRevisionFact(label="Attempt", value=record.checkout.id),
+                    schemas.WorkflowRevisionFact(label="Reason", value=reason.replace("_", " ").title()),
+                ],
+            )
+        if record.order:
+            facts = [
+                schemas.WorkflowRevisionFact(
+                    label="Status", value=record.order.status.replace("_", " ").title()
+                ),
+                schemas.WorkflowRevisionFact(
+                    label="Total",
+                    value=f"{record.order.total.amount:g} {record.order.total.currency}",
+                ),
+                schemas.WorkflowRevisionFact(label="Delivery", value=record.order.delivery_label),
+            ]
+            if record.order.tracking_number:
+                facts.append(
+                    schemas.WorkflowRevisionFact(
+                        label="Tracking", value=record.order.tracking_number
+                    )
+                )
+            return schemas.WorkflowRevisionDecision(
+                kind="order",
+                title=f"{record.order.title}: {record.order.status.replace('_', ' ')}",
+                description=f"Merchant order {record.order.merchant_order_ref}",
+                facts=facts,
+            )
+        if record.proposal:
+            approved = record.approval and record.approval.decision == "approved"
+            return schemas.WorkflowRevisionDecision(
+                kind="approval" if approved else "proposal",
+                title=record.proposal.approval_text,
+                description=(
+                    record.approval.audit_summary
+                    if approved and record.approval
+                    else "The user must approve these exact terms before checkout can begin."
+                ),
+                facts=[
+                    schemas.WorkflowRevisionFact(label="Product", value=record.proposal.title),
+                    schemas.WorkflowRevisionFact(
+                        label="Merchant", value=record.proposal.merchant_name
+                    ),
+                    schemas.WorkflowRevisionFact(
+                        label="Total",
+                        value=f"{record.proposal.total.amount:g} {record.proposal.total.currency}",
+                    ),
+                    schemas.WorkflowRevisionFact(
+                        label="Delivery", value=record.proposal.delivery.label
+                    ),
+                    schemas.WorkflowRevisionFact(
+                        label="Returns", value=record.proposal.returns.label
+                    ),
+                    schemas.WorkflowRevisionFact(
+                        label="Payment", value=record.proposal.payment_method_label
+                    ),
+                ],
+            )
+        if record.workflow.state in {"no_exact_match", "rejected", "cancelled", "completed"}:
+            return schemas.WorkflowRevisionDecision(
+                kind="result",
+                title=record.workflow.summary,
+                description="This revision records the workflow outcome at that point in history.",
+            )
+        return None
 
     def _history(self, record: WorkflowRecord) -> schemas.WorkflowHistory:
         if not record.current_revision_id:

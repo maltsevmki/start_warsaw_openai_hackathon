@@ -14,3 +14,5 @@ dist/
 mobile/.env.local
 .vscode/
 .claude/
+!tests/
+!tests/fakes.py

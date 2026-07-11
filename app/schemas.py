@@ -155,6 +155,11 @@ class Rating(APIModel):
     count: int
 
 
+class EvidenceSource(APIModel):
+    url: str
+    title: str
+
+
 class Offer(APIModel):
     id: str
     merchant_id: str = Field(alias="merchantId")
@@ -172,6 +177,8 @@ class Offer(APIModel):
     returns: Returns
     warranty: Warranty
     rating: Rating
+    product_url: str | None = Field(default=None, alias="productUrl")
+    evidence_sources: list[EvidenceSource] = Field(default_factory=list, alias="evidenceSources")
     risk_flags: list[str] = Field(default_factory=list, alias="riskFlags")
     demo_behavior: Literal[
         "normal", "price_changes_at_checkout", "out_of_stock_at_checkout", "payment_failed"
@@ -190,10 +197,14 @@ class RankedOffer(APIModel):
     rank: int
     score: float
     title: str
+    merchant_name: str = Field(alias="merchantName")
+    product_url: str | None = Field(default=None, alias="productUrl")
+    evidence_sources: list[EvidenceSource] = Field(default_factory=list, alias="evidenceSources")
     total: Money
     reasons: list[str]
     tradeoffs: list[str]
     disqualifiers: list[str]
+    risk_flags: list[str] = Field(default_factory=list, alias="riskFlags")
 
 
 class ComparisonResult(APIModel):
@@ -225,6 +236,8 @@ class CheckoutProposal(APIModel):
     offer_id: str = Field(alias="offerId")
     merchant_name: str = Field(alias="merchantName")
     title: str
+    product_url: str | None = Field(default=None, alias="productUrl")
+    evidence_sources: list[EvidenceSource] = Field(default_factory=list, alias="evidenceSources")
     quantity: Literal[1] = 1
     line_items: list[ProposalLineItem] = Field(alias="lineItems")
     subtotal: Money
@@ -323,6 +336,27 @@ class WorkflowSummary(APIModel):
     available_actions: list[WorkflowAction] = Field(alias="availableActions")
 
 
+class WorkflowRevisionFact(APIModel):
+    label: str
+    value: str
+
+
+class WorkflowRevisionDecision(APIModel):
+    kind: Literal[
+        "clarification",
+        "alternative",
+        "proposal",
+        "approval",
+        "checkout_failure",
+        "order",
+        "policy",
+        "result",
+    ]
+    title: str
+    description: str | None = None
+    facts: list[WorkflowRevisionFact] = Field(default_factory=list)
+
+
 class WorkflowRevision(APIModel):
     id: str
     workflow_id: str = Field(alias="workflowId")
@@ -333,6 +367,7 @@ class WorkflowRevision(APIModel):
     action: str
     label: str
     summary: str
+    decision: WorkflowRevisionDecision | None = None
     created_at: datetime = Field(alias="createdAt")
     is_current: bool = Field(alias="isCurrent")
     can_rollback: bool = Field(alias="canRollback")

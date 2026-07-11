@@ -4,7 +4,8 @@ from app.adapters.openai_comparison import (
     ComparisonRationaleOutput,
     OpenAIComparisonRationale,
 )
-from app.modules import ComparisonModule, DemoProfileModule, IntentGuardrailModule, MockCatalogModule
+from app.modules import ComparisonModule, DemoProfileModule, IntentGuardrailModule
+from tests.fakes import TestCatalog
 
 
 PROMPT = "Find me a monitor under 1000 PLN for my MacBook by tomorrow."
@@ -33,7 +34,7 @@ class FailingRationale:
 def _comparison_inputs():
     profile = DemoProfileModule().get_profile()
     constraints = IntentGuardrailModule().classify(PROMPT, [], profile).constraints
-    offers = MockCatalogModule().search(constraints, profile).offers
+    offers = TestCatalog().search(constraints, profile).offers
     return constraints, profile, offers
 
 

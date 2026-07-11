@@ -1,6 +1,7 @@
 from app.modules import MockCheckoutModule
 from app.orchestrator import WorkflowOrchestrator
 from app.payments import MockPaymentGateway, PaymentResult, default_gateway
+from tests.fakes import TestCatalog
 
 
 HAPPY_PROMPT = (
@@ -20,7 +21,7 @@ class _StubGateway:
 
 
 def _approved_proposal():
-    orch = WorkflowOrchestrator()
+    orch = WorkflowOrchestrator(catalog=TestCatalog())
     view = orch.start_workflow(HAPPY_PROMPT)
     approved = orch.approve_proposal(
         view.workflow.id, view.proposal.id, view.proposal.version, view.proposal.hash
