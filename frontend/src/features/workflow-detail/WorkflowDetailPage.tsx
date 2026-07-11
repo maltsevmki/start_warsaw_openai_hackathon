@@ -18,7 +18,7 @@ import { DecisionPanel } from '../../components/workflow/DecisionPanel'
 import { WorkflowHistoryGraph } from '../../components/workflow/WorkflowHistoryGraph'
 import Toast, { type ToastMessage } from '../../components/Toast'
 import { autoModeCheckoutUrl, isAutoModeEnabled } from '../auto-mode'
-import { openExternalInNewTab } from '../external-navigation'
+import { openExternalInCurrentTab } from '../external-navigation'
 import {
   ComparisonSection,
   PurchaseControlPanel,
@@ -71,7 +71,7 @@ export function WorkflowDetailPage({
       if (isAutoModeEnabled() || operation.redirectAfterApproval) {
         const checkoutUrl = autoModeCheckoutUrl(view)
         if (checkoutUrl && typeof window !== 'undefined') {
-          openExternalInNewTab(checkoutUrl)
+          openExternalInCurrentTab(checkoutUrl)
           openedCheckoutUrl.current = checkoutUrl
         }
       }
@@ -83,7 +83,7 @@ export function WorkflowDetailPage({
     if (!query.data || !isAutoModeEnabled()) return
     const checkoutUrl = autoModeCheckoutUrl(query.data)
     if (checkoutUrl && checkoutUrl !== openedCheckoutUrl.current) {
-      openExternalInNewTab(checkoutUrl)
+      openExternalInCurrentTab(checkoutUrl)
       openedCheckoutUrl.current = checkoutUrl
     }
   }, [query.data])

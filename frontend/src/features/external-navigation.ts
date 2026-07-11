@@ -3,3 +3,7 @@ export function openExternalInNewTab(url: string) {
   if (opened) opened.opener = null
   return Boolean(opened)
 }
+
+export function openExternalInCurrentTab(url: string) {
+  window.location.assign(url)
+}
