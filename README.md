@@ -111,6 +111,18 @@ curl -s http://127.0.0.1:8000/api/workflows \
 
 Use `workflow.id` and the returned proposal's `id`, `version`, and `hash` in the approval request. Then use the returned `approval.id` for checkout. This deliberate two-step sequence demonstrates that approval alone never executes a purchase.
 
+## Expo mobile app
+
+The companion React Native app lives in `mobile/`. It mirrors the web workflow on iOS, Android, and Expo web, including clarification, alternatives, exact-term approval, separate checkout, tracking simulation, revisions, and the trust trail.
+
+```powershell
+cd mobile
+npm install
+npm start
+```
+
+Set `EXPO_PUBLIC_API_URL` to the computer's LAN address when testing with Expo Go on a physical phone. See [mobile/README.md](mobile/README.md) for emulator defaults and quality commands.
+
 ## Tests
 
 ```bash

@@ -1,18 +1,21 @@
 import {
+  AlertTriangle,
   Check,
   CircleDot,
   Clock3,
   LoaderCircle,
+  LockKeyhole,
   PackageCheck,
   ShieldCheck,
   Sparkles,
+  Target,
 } from 'lucide-react'
 import { formatDate, formatMoney, stateLabel, titleCase } from '../../api/format'
 import type {
   ComparisonResult,
-  DomainEvent,
   ShoppingConstraints,
   WorkflowSummary,
+  WorkflowView,
 } from '../../api/types'
 
 const phases = ['Request', 'Research', 'Review', 'Approval', 'Checkout', 'Tracking', 'Complete']
@@ -162,32 +165,80 @@ export function ComparisonSection({
   )
 }
 
-const importantEvent = (event: DomainEvent) =>
-  ['consent', 'checkout', 'tracking'].includes(event.module) ||
-  event.type.includes('approval') || event.type.includes('exception')
+const currentStep = (view: WorkflowView) => {
+  const state = view.workflow.state
+  if (state === 'needs_clarification') return ['Your input is needed', view.clarification?.text ?? view.workflow.summary]
+  if (state === 'awaiting_alternative_acceptance') return ['Review the alternatives', 'Your original constraints stay unchanged until you accept an adjustment.']
+  if (state === 'awaiting_approval' && view.approval) return ['Ready for checkout', 'Your approval is saved. Checkout still requires a separate action.']
+  if (state === 'awaiting_approval') return ['Review the exact terms', 'Check the selected offer and approve only if every term works for you.']
+  if (state === 'blocked_by_policy') return ['Purchase stopped safely', view.guardrail?.message ?? view.workflow.summary]
+  if (state === 'checkout_failed') return ['Checkout stopped', 'A final validation changed or failed, so the purchase did not continue.']
+  if (state === 'tracking') return ['Order in progress', view.order ? `${titleCase(view.order.status)} · ${view.order.deliveryLabel}` : view.workflow.summary]
+  if (state === 'completed') return ['Order complete', 'The order has been delivered and the workflow is complete.']
+  if (state === 'cancelled' || state === 'rejected') return ['Workflow closed', 'No further purchase action will be taken.']
+  return ['Agent is working', view.workflow.summary]
+}
 
-export function AuditTrail({ events }: { events: DomainEvent[] }) {
+const controlMessage = (view: WorkflowView) => {
+  const state = view.workflow.state
+  if (state === 'awaiting_approval' && !view.approval) return 'No payment can run until you approve the exact proposal terms.'
+  if (state === 'awaiting_approval' && view.approval) return 'Approval does not execute checkout. You still control the final action.'
+  if (state === 'awaiting_alternative_acceptance') return 'The agent cannot relax your constraints without your explicit choice.'
+  if (state === 'needs_clarification') return 'Research is paused until you answer the requested question.'
+  if (state === 'checkout_failed') return 'The protection check stopped the purchase before an order was created.'
+  if (state === 'blocked_by_policy') return 'The safety boundary prevents this request from reaching checkout.'
+  if (state === 'tracking' || state === 'completed') return 'The purchase is complete; this panel now reflects fulfillment information.'
+  return 'The agent can research and compare, but commitment remains under your control.'
+}
+
+const requiredAction = (view: WorkflowView) => {
+  const state = view.workflow.state
+  if (state === 'needs_clarification') return 'Answer the requested question to continue research.'
+  if (state === 'awaiting_alternative_acceptance') return 'Choose an adjustment or keep your original constraints.'
+  if (state === 'awaiting_approval' && !view.approval) return 'Review the exact terms, then approve or decline the proposal.'
+  if (state === 'awaiting_approval' && view.approval) return 'Execute checkout when you are ready, or cancel the workflow.'
+  if (state === 'checkout_failed') return 'Review what changed, then start another request if needed.'
+  if (state === 'blocked_by_policy') return 'Start a different request that can be handled safely.'
+  if (state === 'tracking') return 'Follow the delivery status. No purchase decision is required.'
+  if (state === 'completed' || state === 'cancelled' || state === 'rejected') return 'No action is required.'
+  return 'No action is required while the agent is working.'
+}
+
+export function PurchaseControlPanel({ view }: { view: WorkflowView }) {
+  const [stepTitle, stepDetail] = currentStep(view)
+  const chosenOffer = view.comparison?.rankedOffers.find((offer) => offer.offerId === view.proposal?.offerId)
+    ?? view.comparison?.rankedOffers.find((offer) => offer.offerId === view.comparison?.bestOfferId)
+  const risks = [
+    ...(chosenOffer?.tradeoffs ?? []),
+    ...(chosenOffer?.disqualifiers ?? []),
+    ...(view.comparison?.missingEvidence ?? []),
+    ...(view.proposal && !view.proposal.returns.returnable ? ['This offer is not returnable.'] : []),
+    ...(view.checkout?.failureReason ? [`Checkout stopped: ${titleCase(view.checkout.failureReason)}.`] : []),
+  ].filter((item, index, items) => items.indexOf(item) === index).slice(0, 3)
+
   return (
-    <aside className="audit-card" aria-label="Audit trail">
-      <div className="audit-heading">
-        <div><p className="eyebrow">Transparent by design</p><h2>Audit trail</h2></div>
-        <span>{events.length} events</span>
+    <aside className="control-card" aria-label="Purchase control">
+      <div className="control-heading">
+        <div><p className="eyebrow">Useful at a glance</p><h2>Purchase control</h2></div>
+        <ShieldCheck size={20} aria-hidden="true" />
       </div>
-      <ol className="audit-list">
-        {events.map((event) => (
-          <li key={event.id} className={importantEvent(event) ? 'important' : ''}>
-            <span className="audit-dot" aria-hidden="true" />
-            <div>
-              <div className="audit-tags"><span>{titleCase(event.module)}</span><span>{event.actor}</span></div>
-              <p>{event.summary}</p>
-              <time>{formatDate(event.createdAt)}</time>
-              {event.data && Object.keys(event.data).length > 0 && (
-                <details><summary>Technical details</summary><pre>{JSON.stringify(event.data, null, 2)}</pre></details>
-              )}
-            </div>
-          </li>
-        ))}
-      </ol>
+      <div className="control-now">
+        <span><Target size={18} /></span>
+        <div><small>Now</small><strong>{stepTitle}</strong><p>{stepDetail}</p></div>
+      </div>
+
+      {risks.length > 0 && (
+        <section className="control-section control-attention">
+          <h3><AlertTriangle size={16} /> Worth noting</h3>
+          <ul>{risks.map((risk) => <li key={risk}>{risk}</li>)}</ul>
+        </section>
+      )}
+
+      <div className="control-boundary">
+        <LockKeyhole size={17} />
+        <div><strong>What you need to do</strong><p>{requiredAction(view)}</p></div>
+      </div>
+      <p className="control-note">{controlMessage(view)}</p>
     </aside>
   )
 }

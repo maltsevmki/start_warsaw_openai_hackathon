@@ -1,6 +1,6 @@
 import { request } from './client'
 import type {
-  DemoScenarios,
+  ScenarioPrompts,
   DomainEvent,
   ClarificationReply,
   OrderStatus,
@@ -10,10 +10,10 @@ import type {
 export const getHealth = (signal?: AbortSignal) =>
   request<{ status: string; mode: string; catalogOffers: number }>('/health', { signal })
 
-export const getDemoScenarios = (signal?: AbortSignal) =>
-  request<DemoScenarios>('/api/demo/scenarios', { signal })
+export const getScenarioPrompts = (signal?: AbortSignal) =>
+  request<ScenarioPrompts>('/api/demo/scenarios', { signal })
 
-export const resetDemo = () => request<void>('/api/demo/reset', { method: 'POST' })
+export const resetWorkspace = () => request<void>('/api/demo/reset', { method: 'POST' })
 
 export const startWorkflow = (prompt: string) =>
   request<WorkflowView>('/api/workflows', {

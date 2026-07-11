@@ -11,7 +11,7 @@ function About() {
         <p className="eyebrow">About ClearCart</p>
         <h1>Commerce automation with a clear consent boundary.</h1>
         <p>
-          ClearCart is a safe demo of an agent that can research, compare, and
+          ClearCart is an agent that can research, compare, and
           prepare a purchase while keeping every commitment in your hands.
         </p>
       </section>

@@ -41,7 +41,7 @@ const failureCopy: Record<string, string> = {
   out_of_stock: 'The item became unavailable, so checkout stopped and no payment was made.',
   delivery_changed: 'The delivery commitment changed, so checkout stopped before payment.',
   return_policy_changed: 'The return terms changed, so checkout stopped before payment.',
-  payment_failed: 'The mock payment authorization failed and no order was created.',
+  payment_failed: 'The payment authorization failed and no order was created.',
 }
 
 const trackingStatuses: OrderStatus[] = [
@@ -214,6 +214,7 @@ function AlternativePicker({ view, actions, busy, error, onAlternative, onCancel
 
 function ProposalCard({ view, actions, busy, error, onApprove, onReject, onCancel }: CommonProps) {
   const [reason, setReason] = useState('')
+  const [showDecline, setShowDecline] = useState(false)
   const proposal = view.proposal!
   return (
     <section className="decision-card proposal-card">
@@ -223,17 +224,24 @@ function ProposalCard({ view, actions, busy, error, onApprove, onReject, onCance
         <div><span>Delivery</span><strong>{proposal.delivery.label}</strong><small>{proposal.delivery.earliest} – {proposal.delivery.latest}</small></div>
         <div><span>Returns</span><strong>{proposal.returns.label}</strong><small>{proposal.returns.returnable ? `${proposal.returns.days} days` : 'Not returnable'}</small></div>
         <div><span>Warranty</span><strong>{proposal.warranty.label}</strong><small>{proposal.warranty.months} months</small></div>
-        <div><span>Payment</span><strong>{proposal.paymentMethodLabel}</strong><small>Mock card only</small></div>
+        <div><span>Payment</span><strong>{proposal.paymentMethodLabel}</strong><small>Protected payment method</small></div>
       </div>
       <div className="line-items">{proposal.lineItems.map((item) => <div key={item.label}><span>{item.label}</span><strong>{formatMoney(item.amount)}</strong></div>)}<div className="total"><span>Total</span><strong>{formatMoney(proposal.total)}</strong></div></div>
       <div className="approval-copy"><ShieldCheck size={20} /><p>{proposal.approvalText}<small>Expires {formatDate(proposal.expiresAt)}</small></p></div>
-      <label htmlFor="rejection-reason">Optional reason if you decline</label>
-      <input id="rejection-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="e.g. I want a different merchant" />
+      {showDecline && (
+        <div className="decline-panel">
+          <div><strong>Decline this proposal?</strong><p>No payment or order will be created.</p></div>
+          <label htmlFor="rejection-reason">Reason <span>Optional</span></label>
+          <input id="rejection-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="e.g. I want a different merchant" autoFocus />
+        </div>
+      )}
       <ActionError message={error} />
       <div className="button-row">
-        {actions.has('approve_proposal') && <button className="button button-primary button-purchase" disabled={Boolean(busy)} onClick={onApprove}>{busy === 'approve' ? <><LoaderCircle className="spin" size={17} /> Recording approval…</> : <><Check size={17} /> Approve exact terms</>}</button>}
-        {actions.has('reject_proposal') && <button className="button button-secondary" disabled={Boolean(busy)} onClick={() => onReject(reason.trim() || undefined)}>Decline proposal</button>}
-        <CancelButton show={actions.has('cancel')} busy={Boolean(busy)} onClick={onCancel} />
+        {!showDecline && actions.has('approve_proposal') && <button className="button button-primary button-purchase" disabled={Boolean(busy)} onClick={onApprove}>{busy === 'approve' ? <><LoaderCircle className="spin" size={17} /> Recording approval…</> : <><Check size={17} /> Approve exact terms</>}</button>}
+        {!showDecline && actions.has('reject_proposal') && <button className="button button-secondary" disabled={Boolean(busy)} onClick={() => setShowDecline(true)}>Decline proposal</button>}
+        {showDecline && actions.has('reject_proposal') && <button className="button button-danger" disabled={Boolean(busy)} onClick={() => onReject(reason.trim() || undefined)}>{busy === 'reject' ? <><LoaderCircle className="spin" size={17} /> Declining…</> : 'Confirm decline'}</button>}
+        {showDecline && <button className="button button-secondary" disabled={Boolean(busy)} onClick={() => { setShowDecline(false); setReason('') }}>Keep reviewing</button>}
+        {!showDecline && <CancelButton show={actions.has('cancel')} busy={Boolean(busy)} onClick={onCancel} />}
       </div>
     </section>
   )
@@ -247,9 +255,9 @@ function ApprovalReceipt({ view, actions, busy, error, onCheckout, onCancel }: C
     <section className="decision-card approval-receipt">
       <div className="decision-icon success"><CheckCircle2 size={24} /></div>
       <p className="eyebrow">Consent recorded</p><h2>Approval is saved. Checkout has not run.</h2>
-      <p className="decision-lead">This separate checkpoint lets the agent revalidate price, stock, delivery, and return terms before any mock payment.</p>
+      <p className="decision-lead">This separate checkpoint lets the agent revalidate price, stock, delivery, and return terms before payment.</p>
       <dl className="receipt-grid">
-        <div><dt>Decision</dt><dd>{titleCase(approval.decision)}</dd></div><div><dt>Actor</dt><dd>{approval.actor}</dd></div>
+        <div><dt>Decision</dt><dd>{titleCase(approval.decision)}</dd></div><div><dt>Actor</dt><dd>You</dd></div>
         <div><dt>Recorded</dt><dd>{formatDate(approval.decidedAt)}</dd></div><div><dt>Proposal</dt><dd>Version {approval.proposalVersion}</dd></div>
       </dl>
       <div className="hash-row"><span>Bound hash</span><code>{approval.proposalHash.slice(0, 12)}…{approval.proposalHash.slice(-8)}</code><button aria-label="Copy full proposal hash" onClick={copyHash}><Clipboard size={15} /> {copied ? 'Copied' : 'Copy'}</button></div>
@@ -281,12 +289,12 @@ function OrderTracking({ view, actions, busy, error, onSimulate, onCancel }: Com
   return (
     <section className="decision-card order-card">
       <div className={`decision-icon ${completed ? 'success' : ''}`}>{completed ? <CheckCircle2 size={24} /> : <Truck size={24} />}</div>
-      <p className="eyebrow">{completed ? 'Delivery complete' : 'Mock order tracking'}</p>
+      <p className="eyebrow">{completed ? 'Delivery complete' : 'Order tracking'}</p>
       <h2>{completed ? 'Your order was delivered' : titleCase(order.status)}</h2>
       <p className="decision-lead">{order.title} · {formatMoney(order.total)}</p>
       <div className="order-meta"><span><small>Merchant reference</small><strong>{order.merchantOrderRef}</strong></span><span><small>Tracking number</small><strong>{order.trackingNumber ?? 'Assigned after shipping'}</strong></span><span><small>Delivery</small><strong>{order.deliveryLabel}</strong></span></div>
       <ol className="order-timeline">{order.timeline.map((entry, index) => <li key={`${entry.status}-${entry.happenedAt}`} className={index === order.timeline.length - 1 ? 'current' : ''}><span>{index === order.timeline.length - 1 ? <Package size={15} /> : <Check size={14} />}</span><div><strong>{entry.label}</strong><small>{formatDate(entry.happenedAt)}</small></div></li>)}</ol>
-      {actions.has('simulate_tracking') && <div className="simulation-box"><div><strong>Demo-only controls</strong><small>Simulate a merchant tracking update.</small></div><div className="simulation-buttons">{trackingStatuses.map((status) => <button key={status} disabled={Boolean(busy) || status === order.status} onClick={() => onSimulate(status)}>{busy === `tracking-${status}` ? <LoaderCircle className="spin" size={14} /> : titleCase(status)}</button>)}</div></div>}
+      {actions.has('simulate_tracking') && <div className="simulation-box"><div><strong>Tracking controls</strong><small>Preview a merchant tracking update.</small></div><div className="simulation-buttons">{trackingStatuses.map((status) => <button key={status} disabled={Boolean(busy) || status === order.status} onClick={() => onSimulate(status)}>{busy === `tracking-${status}` ? <LoaderCircle className="spin" size={14} /> : titleCase(status)}</button>)}</div></div>}
       <ActionError message={error} /><div className="button-row">{completed && <Link className="button button-primary" to="/">Start another request</Link>}<CancelButton show={actions.has('cancel')} busy={Boolean(busy)} onClick={onCancel} /></div>
     </section>
   )

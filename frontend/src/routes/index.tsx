@@ -14,14 +14,16 @@ import {
   ShoppingBag,
   Zap,
 } from 'lucide-react'
-import { useState } from 'react'
-import { demoKeys, workflowKeys } from '../api/query-keys'
-import type { DemoScenarios } from '../api/types'
-import { getDemoScenarios, getHealth, resetDemo, startWorkflow } from '../api/workflow-api'
+import { useCallback, useState } from 'react'
+import { appKeys, workflowKeys } from '../api/query-keys'
+import type { ScenarioPrompts } from '../api/types'
+import { getHealth, getScenarioPrompts, resetWorkspace, startWorkflow } from '../api/workflow-api'
+import ConfirmDialog from '../components/ConfirmDialog'
+import Toast, { type ToastMessage } from '../components/Toast'
 
 export const Route = createFileRoute('/')({ component: Launcher })
 
-const fallbackScenarios: DemoScenarios = {
+const fallbackScenarios: ScenarioPrompts = {
   happyPath: 'Find me the best monitor under 1000 PLN that works with my MacBook, arrives tomorrow, and has good return terms. Buy it if you are confident.',
   clarification: 'Buy me shoes for tomorrow.',
   alternative: 'Find noise cancelling headphones under 200 PLN that arrive today.',
@@ -40,10 +42,14 @@ const scenarioInfo = [
 function Launcher() {
   const [prompt, setPrompt] = useState('')
   const [fieldError, setFieldError] = useState('')
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const dismissToast = useCallback(() => setToast(null), [])
+  const closeResetDialog = useCallback(() => setConfirmReset(false), [])
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const scenarios = useQuery({ queryKey: demoKeys.scenarios, queryFn: ({ signal }) => getDemoScenarios(signal), placeholderData: fallbackScenarios })
-  const health = useQuery({ queryKey: demoKeys.health, queryFn: ({ signal }) => getHealth(signal), retry: 1 })
+  const scenarios = useQuery({ queryKey: appKeys.scenarios, queryFn: ({ signal }) => getScenarioPrompts(signal), placeholderData: fallbackScenarios })
+  const health = useQuery({ queryKey: appKeys.health, queryFn: ({ signal }) => getHealth(signal), retry: 1 })
   const start = useMutation({
     mutationFn: startWorkflow,
     onSuccess: (view) => {
@@ -52,8 +58,13 @@ function Launcher() {
     },
   })
   const reset = useMutation({
-    mutationFn: resetDemo,
-    onSuccess: () => queryClient.removeQueries({ queryKey: workflowKeys.all }),
+    mutationFn: resetWorkspace,
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: workflowKeys.all })
+      setConfirmReset(false)
+      setToast({ id: Date.now(), text: 'Workflow history cleared.' })
+    },
+    onError: (error) => setToast({ id: Date.now(), text: error.message, tone: 'error' }),
   })
   const submit = () => {
     if (!prompt.trim()) return setFieldError('Describe what you want the agent to find.')
@@ -81,12 +92,12 @@ function Launcher() {
           <textarea id="shopping-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Find me a reliable monitor under 1000 PLN that works with my MacBook and arrives tomorrow…" onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') submit() }} />
           {fieldError && <p className="field-error">{fieldError}</p>}
           {start.error && <div className="action-error" role="alert">{start.error.message}</div>}
-          <div className="composer-footer"><span><Zap size={14} /> Safe demo — no real payment</span><button className="button button-primary" onClick={submit} disabled={start.isPending}>{start.isPending ? <><span className="mini-spinner" /> Starting…</> : <>Start search <ArrowRight size={17} /></>}</button></div>
+          <div className="composer-footer"><span><Zap size={14} /> Terms are revalidated before checkout</span><button className="button button-primary" onClick={submit} disabled={start.isPending}>{start.isPending ? <><span className="mini-spinner" /> Starting…</> : <>Start search <ArrowRight size={17} /></>}</button></div>
         </div>
       </section>
 
       <section className="scenario-section page-width">
-        <div className="scenario-heading"><div><p className="eyebrow">Guided demos</p><h2>Try a real decision point</h2><p>Choose a scenario to fill the request. You can edit it before starting.</p></div><button className="reset-button" disabled={reset.isPending} onClick={() => { if (window.confirm('Reset all in-memory demo workflows?')) reset.mutate() }}><RotateCcw size={14} /> {reset.isPending ? 'Resetting…' : 'Reset demo'}</button></div>
+        <div className="scenario-heading"><div><p className="eyebrow">Guided scenarios</p><h2>Try a real decision point</h2><p>Choose a scenario to fill the request. You can edit it before starting.</p></div><button className="reset-button" disabled={reset.isPending} onClick={() => setConfirmReset(true)}><RotateCcw size={14} /> Clear history</button></div>
         <div className="scenario-grid">
           {scenarioInfo.map(({ key, title, tag, detail, icon: Icon, tone }, index) => (
             <button key={key} className={`scenario-card tone-${tone}`} onClick={() => { setPrompt(data[key]); setFieldError(''); window.scrollTo({ top: 120, behavior: 'smooth' }) }} style={{ animationDelay: `${index * 70}ms` }}>
@@ -96,14 +107,39 @@ function Launcher() {
         </div>
       </section>
 
-      <section className="how-section page-width">
-        <div className="how-heading"><p className="eyebrow">How it works</p><h2>Helpful automation, clear boundaries.</h2></div>
-        <div className="how-grid">
-          <article><span><Search size={21} /></span><div><small>Step 1</small><h3>Describe what matters</h3><p>Set the budget, timing, compatibility, or anything else in natural language.</p></div></article>
-          <article><span><ShieldCheck size={21} /></span><div><small>Step 2</small><h3>Review the evidence</h3><p>Compare ranked offers, tradeoffs, delivery, returns, and the exact total.</p></div></article>
-          <article><span><ShoppingBag size={21} /></span><div><small>Step 3</small><h3>Approve, then execute</h3><p>Consent and checkout stay separate. Nothing runs before you make the call.</p></div></article>
+      <section className="story-section">
+        <div className="story-shell page-width">
+          <div className="story-copy">
+            <div className="story-heading"><p className="eyebrow">Built around your decision</p><h2>One calm path from request to receipt.</h2><p>The agent keeps moving until your judgment is needed. Every important boundary stays visible.</p></div>
+            <div className="story-steps">
+              <article><span className="story-number">01</span><div><div className="story-step-kicker"><span className="story-step-icon"><Search size={20} /></span><small>Research</small></div><h3>Describe the outcome</h3><p>Set the budget, timing, compatibility, or anything else in natural language. ClearCart turns it into a focused search.</p></div></article>
+              <article><span className="story-number">02</span><div><div className="story-step-kicker"><span className="story-step-icon"><ShieldCheck size={20} /></span><small>Evidence</small></div><h3>Compare without the noise</h3><p>See the top choices, real tradeoffs, delivery, returns, and exact total in one readable decision view.</p></div></article>
+              <article><span className="story-number">03</span><div><div className="story-step-kicker"><span className="story-step-icon"><ShoppingBag size={20} /></span><small>Consent</small></div><h3>Approve, then execute</h3><p>Approval and checkout remain separate. The final offer is revalidated before payment runs.</p></div></article>
+            </div>
+          </div>
+          <div className="story-visual-wrap">
+            <div className="story-visual" aria-hidden="true">
+              <span className="story-orbit orbit-one" /><span className="story-orbit orbit-two" />
+              <div className="story-core"><span><ShoppingBag size={24} /></span><strong>ClearCart</strong><small>Waiting for your decision</small></div>
+              <div className="story-node node-search"><Search size={16} /><span>Research</span></div>
+              <div className="story-node node-review"><ListChecks size={16} /><span>Compare</span></div>
+              <div className="story-node node-consent"><ShieldCheck size={16} /><span>Approve</span></div>
+              <div className="story-pulse"><i /> Your decision stays central</div>
+            </div>
+          </div>
         </div>
       </section>
+      <Toast message={toast} onDismiss={dismissToast} />
+      {confirmReset && (
+        <ConfirmDialog
+          title="Clear workflow history?"
+          description="This removes the currently stored workflows. This action cannot be undone."
+          confirmLabel="Clear history"
+          busy={reset.isPending}
+          onConfirm={() => reset.mutate()}
+          onClose={closeResetDialog}
+        />
+      )}
     </main>
   )
 }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ApiError } from '../../api/client'
 import { workflowKeys } from '../../api/query-keys'
 import type { ClarificationReply, OrderStatus, WorkflowView } from '../../api/types'
@@ -17,14 +17,30 @@ import {
 } from '../../api/workflow-api'
 import { DecisionPanel } from '../../components/workflow/DecisionPanel'
 import { WorkflowHistoryGraph } from '../../components/workflow/WorkflowHistoryGraph'
+import Toast, { type ToastMessage } from '../../components/Toast'
 import {
-  AuditTrail,
   ComparisonSection,
+  PurchaseControlPanel,
   RequestSummary,
   WorkflowHeader,
 } from '../../components/workflow/WorkflowOverview'
 
 type Operation = { name: string; run: () => Promise<WorkflowView> }
+
+function successMessage(operation: string, view: WorkflowView): ToastMessage {
+  if (operation === 'clarify') return { id: Date.now(), text: 'Details saved. Research continued.' }
+  if (operation === 'alternative') return { id: Date.now(), text: 'Your constraint choice was applied.' }
+  if (operation === 'approve') return { id: Date.now(), text: 'Approval recorded. Checkout has not run yet.' }
+  if (operation === 'reject') return { id: Date.now(), text: 'Proposal declined.' }
+  if (operation === 'checkout') return view.workflow.state === 'checkout_failed'
+    ? { id: Date.now(), text: 'Checkout stopped safely.', tone: 'info' }
+    : { id: Date.now(), text: 'Checkout completed and order created.' }
+  if (operation === 'cancel') return { id: Date.now(), text: 'Workflow cancelled.', tone: 'info' }
+  if (operation === 'rollback') return { id: Date.now(), text: 'Earlier choice restored.' }
+  if (operation.startsWith('select-offer:')) return { id: Date.now(), text: 'Selected offer updated.' }
+  if (operation.startsWith('tracking-')) return { id: Date.now(), text: 'Tracking status updated.' }
+  return { id: Date.now(), text: 'Workflow updated.' }
+}
 
 export function WorkflowDetailPage({
   workflowId,
@@ -35,6 +51,8 @@ export function WorkflowDetailPage({
 }) {
   const queryClient = useQueryClient()
   const [announcement, setAnnouncement] = useState('')
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const dismissToast = useCallback(() => setToast(null), [])
   const query = useQuery({
     queryKey: workflowKeys.detail(workflowId),
     queryFn: ({ signal }) => getWorkflow(workflowId, signal),
@@ -42,11 +60,13 @@ export function WorkflowDetailPage({
   })
   const mutation = useMutation({
     mutationFn: (operation: Operation) => operation.run(),
-    onSuccess: (view) => {
+    onSuccess: (view, operation) => {
       queryClient.setQueryData(workflowKeys.detail(workflowId), view)
       queryClient.setQueryData(workflowKeys.events(workflowId), view.events)
       setAnnouncement(view.workflow.summary)
+      setToast(successMessage(operation.name, view))
     },
+    onError: (error) => setToast({ id: Date.now(), text: error.message, tone: 'error' }),
   })
 
   if (query.isPending) return <PageLoading />
@@ -55,6 +75,7 @@ export function WorkflowDetailPage({
   const view = query.data
   const run = (name: string, operation: () => Promise<WorkflowView>) => {
     setAnnouncement('')
+    setToast(null)
     mutation.mutate({ name, run: operation })
   }
   const message = mutation.error instanceof Error ? mutation.error.message : null
@@ -112,10 +133,11 @@ export function WorkflowDetailPage({
               />
             )}
           </div>
-          <AuditTrail events={view.events} />
+          <PurchaseControlPanel view={view} />
         </div>
       </div>
       <div className="sr-only" aria-live="polite">{announcement}</div>
+      <Toast message={toast} onDismiss={dismissToast} />
     </main>
   )
 }
