@@ -148,24 +148,50 @@ def test_invalid_approval_is_rejected_before_checkout():
     assert "hash" in response.json()["detail"].lower()
 
 
-def test_rollback_endpoint_restores_a_selected_revision():
-    initial = client.post("/api/workflows", json={"prompt": "Buy me shoes for tomorrow."}).json()
-    workflow_id = initial["workflow"]["id"]
-    target_revision_id = initial["history"]["currentRevisionId"]
-    answered = client.post(
-        f"/api/workflows/{workflow_id}/messages",
-        json={"message": "Size 42, black, comfortable for walking."},
-    ).json()
-    assert answered["workflow"]["state"] == "awaiting_approval"
-
-    restored = client.post(
-        f"/api/workflows/{workflow_id}/rollback",
-        json={"revisionId": target_revision_id},
+def test_user_can_select_another_top_offer_before_approval():
+    view = client.post("/api/workflows", json={"prompt": HAPPY_PROMPT}).json()
+    workflow_id = view["workflow"]["id"]
+    current_offer_id = view["proposal"]["offerId"]
+    alternate = next(
+        offer for offer in view["comparison"]["rankedOffers"][:3]
+        if offer["offerId"] != current_offer_id
     )
 
-    assert restored.status_code == 200
-    body = restored.json()
-    assert body["workflow"]["state"] == "needs_clarification"
-    assert "proposal" not in body
-    assert body["history"]["currentRevisionId"] != target_revision_id
-    assert len(body["history"]["revisions"]) == 3
+    selected = client.post(
+        f"/api/workflows/{workflow_id}/select-offer",
+        json={"offerId": alternate["offerId"]},
+    )
+
+    assert selected.status_code == 200
+    updated = selected.json()
+    assert updated["proposal"]["offerId"] == alternate["offerId"]
+    assert updated["proposal"]["id"] != view["proposal"]["id"]
+    assert "select_offer" in updated["workflow"]["availableActions"]
+    assert updated["events"][-1]["type"] == "proposal.offer_changed"
+
+
+def test_offer_cannot_be_changed_after_approval_or_outside_top_three():
+    view = client.post("/api/workflows", json={"prompt": HAPPY_PROMPT}).json()
+    workflow_id = view["workflow"]["id"]
+    invalid = client.post(
+        f"/api/workflows/{workflow_id}/select-offer",
+        json={"offerId": "offer_not_in_comparison"},
+    )
+    assert invalid.status_code == 422
+
+    proposal = view["proposal"]
+    approved = client.post(
+        f"/api/workflows/{workflow_id}/approve",
+        json={
+            "proposalId": proposal["id"],
+            "proposalVersion": proposal["version"],
+            "proposalHash": proposal["hash"],
+            "approved": True,
+        },
+    )
+    assert approved.status_code == 200
+    blocked = client.post(
+        f"/api/workflows/{workflow_id}/select-offer",
+        json={"offerId": view["comparison"]["rankedOffers"][1]["offerId"]},
+    )
+    assert blocked.status_code == 409

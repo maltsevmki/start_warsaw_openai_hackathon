@@ -31,6 +31,7 @@ WorkflowAction = Literal[
     "reject_alternative",
     "approve_proposal",
     "reject_proposal",
+    "select_offer",
     "execute_checkout",
     "simulate_tracking",
     "cancel",
@@ -390,6 +391,10 @@ class ApproveProposalRequest(APIModel):
 class RejectProposalRequest(APIModel):
     proposal_id: str = Field(alias="proposalId")
     reason: str | None = None
+
+
+class SelectOfferRequest(APIModel):
+    offer_id: str = Field(alias="offerId")
 
 
 class CheckoutRequest(APIModel):

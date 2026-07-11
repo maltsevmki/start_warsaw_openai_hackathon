@@ -2,6 +2,7 @@ import {
   Check,
   CircleDot,
   Clock3,
+  LoaderCircle,
   PackageCheck,
   ShieldCheck,
   Sparkles,
@@ -101,7 +102,19 @@ export function RequestSummary({
   )
 }
 
-export function ComparisonSection({ comparison }: { comparison?: ComparisonResult | null }) {
+export function ComparisonSection({
+  comparison,
+  selectedOfferId,
+  canSelect,
+  selectingOfferId,
+  onSelect,
+}: {
+  comparison?: ComparisonResult | null
+  selectedOfferId?: string
+  canSelect: boolean
+  selectingOfferId?: string
+  onSelect: (offerId: string) => void
+}) {
   if (!comparison) return null
   return (
     <section className="content-card">
@@ -115,15 +128,17 @@ export function ComparisonSection({ comparison }: { comparison?: ComparisonResul
       <p className="recommendation-copy">{comparison.summary}</p>
       <p className="confidence-note">Confidence summarizes available catalog evidence; it is not a guarantee.</p>
       <div className="offer-list">
-        {comparison.rankedOffers.map((offer) => {
+        {comparison.rankedOffers.slice(0, 3).map((offer) => {
           const best = offer.offerId === comparison.bestOfferId
+          const selected = offer.offerId === selectedOfferId
           return (
-            <article key={offer.offerId} className={`offer-card ${best ? 'recommended' : ''}`}>
+            <article key={offer.offerId} className={`offer-card ${best ? 'recommended' : ''} ${selected ? 'selected-offer' : ''}`}>
               <div className="offer-rank">#{offer.rank}</div>
               <div className="offer-main">
                 <div className="offer-title-row">
                   <h3>{offer.title}</h3>
-                  {best && <span className="recommended-label"><PackageCheck size={14} /> Recommended</span>}
+                  {best && <span className="recommended-label"><PackageCheck size={14} /> AI pick</span>}
+                  {selected && <span className="selected-label">Your choice</span>}
                 </div>
                 <div className="reason-list">
                   {offer.reasons.map((reason) => <span key={reason} className="positive">✓ {reason}</span>)}
@@ -131,7 +146,14 @@ export function ComparisonSection({ comparison }: { comparison?: ComparisonResul
                   {offer.disqualifiers.map((item) => <span key={item} className="negative">× {item}</span>)}
                 </div>
               </div>
-              <div className="offer-score"><strong>{formatMoney(offer.total)}</strong><span>Score {offer.score.toFixed(1)}</span></div>
+              <div className="offer-action">
+                <strong>{formatMoney(offer.total)}</strong>
+                {canSelect && (
+                  <button type="button" disabled={Boolean(selectingOfferId) || selected} onClick={() => onSelect(offer.offerId)}>
+                    {selectingOfferId === offer.offerId ? <LoaderCircle className="spin" size={14} /> : selected ? 'Selected' : 'Choose'}
+                  </button>
+                )}
+              </div>
             </article>
           )
         })}

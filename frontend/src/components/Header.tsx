@@ -6,8 +6,8 @@ export default function Header() {
   return (
     <header className="site-header">
       <nav className="page-width">
-        <Link to="/" className="brand"><span><ShoppingBag size={19} /></span><strong>ClearCart</strong><small>agent commerce</small></Link>
-        <div className="header-trust"><LockKeyhole size={14} /> No purchase without approval</div>
+        <Link to="/" className="brand" aria-label="ClearCart home"><span><ShoppingBag size={18} /></span><div><strong>ClearCart</strong><small>Calm commerce</small></div></Link>
+        <div className="header-trust"><LockKeyhole size={14} /> You approve every purchase</div>
         <ThemeToggle />
       </nav>
     </header>

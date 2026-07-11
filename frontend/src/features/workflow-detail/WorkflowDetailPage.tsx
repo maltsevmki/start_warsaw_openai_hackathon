@@ -12,6 +12,7 @@ import {
   rejectProposal,
   rollbackWorkflow,
   respondToAlternative,
+  selectOffer,
   simulateOrderStatus,
 } from '../../api/workflow-api'
 import { DecisionPanel } from '../../components/workflow/DecisionPanel'
@@ -58,6 +59,8 @@ export function WorkflowDetailPage({
   }
   const message = mutation.error instanceof Error ? mutation.error.message : null
   const busy = mutation.isPending ? mutation.variables.name : null
+  const canSelectOffer = view.workflow.availableActions.includes('select_offer')
+  const showComparison = view.workflow.state === 'awaiting_approval' && !view.approval
 
   return (
     <main className="workflow-page">
@@ -71,7 +74,6 @@ export function WorkflowDetailPage({
         />
         <div className="workflow-layout">
           <div className="workflow-main">
-            <RequestSummary prompt={view.workflow.prompt} constraints={view.constraints} />
             <DecisionPanel
               view={view}
               busy={busy}
@@ -99,7 +101,16 @@ export function WorkflowDetailPage({
             {mutation.error instanceof ApiError && mutation.error.kind === 'conflict' && (
               <button className="refresh-conflict" onClick={() => query.refetch()}>Refresh workflow to see the latest state</button>
             )}
-            <ComparisonSection comparison={view.comparison} />
+            <RequestSummary prompt={view.workflow.prompt} constraints={view.constraints} />
+            {showComparison && (
+              <ComparisonSection
+                comparison={view.comparison}
+                selectedOfferId={view.proposal?.offerId}
+                canSelect={canSelectOffer}
+                selectingOfferId={busy?.startsWith('select-offer:') ? busy.slice('select-offer:'.length) : undefined}
+                onSelect={(offerId) => run(`select-offer:${offerId}`, () => selectOffer(workflowId, offerId))}
+              />
+            )}
           </div>
           <AuditTrail events={view.events} />
         </div>
