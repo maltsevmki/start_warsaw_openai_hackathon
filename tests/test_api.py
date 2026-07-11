@@ -24,6 +24,8 @@ def test_all_happy_path_http_endpoints():
     workflow_id = view["workflow"]["id"]
     proposal = view["proposal"]
     assert view["workflow"]["state"] == "awaiting_approval"
+    assert proposal["checkoutUrl"] == proposal["productUrl"]
+    assert proposal["checkoutUrl"].startswith("https://")
 
     fetched = client.get(f"/api/workflows/{workflow_id}")
     assert fetched.status_code == 200

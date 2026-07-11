@@ -46,6 +46,13 @@ def _offer(
             },
             "warranty": {"months": 24, "label": "24-month warranty"},
             "rating": {"value": rating, "count": rating_count},
+            "productUrl": f"https://shop.example.test/products/{offer_id}",
+            "evidenceSources": [
+                {
+                    "url": f"https://shop.example.test/products/{offer_id}",
+                    "title": title,
+                }
+            ],
             "riskFlags": [],
             "demoBehavior": demo_behavior,
         }

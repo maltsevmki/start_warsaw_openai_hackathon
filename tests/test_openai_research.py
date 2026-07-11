@@ -103,6 +103,7 @@ def test_openai_research_returns_schema_valid_offers_and_caches_them():
 
     assert result.status == "offers_found"
     assert result.offers[0].id == "web_monitor_1"
+    assert result.offers[0].product_url == "https://shop.example.com/products/web_monitor_1"
     assert catalog.get_offer("web_monitor_1") is not None
     assert client.responses.calls[0]["text_format"] is OfferList
     request = client.responses.calls[0]

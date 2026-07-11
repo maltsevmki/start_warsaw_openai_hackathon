@@ -237,6 +237,7 @@ class CheckoutProposal(APIModel):
     merchant_name: str = Field(alias="merchantName")
     title: str
     product_url: str | None = Field(default=None, alias="productUrl")
+    checkout_url: str | None = Field(default=None, alias="checkoutUrl")
     evidence_sources: list[EvidenceSource] = Field(default_factory=list, alias="evidenceSources")
     quantity: Literal[1] = 1
     line_items: list[ProposalLineItem] = Field(alias="lineItems")

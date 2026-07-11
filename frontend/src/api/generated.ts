@@ -421,6 +421,8 @@ export interface components {
             title: string;
             /** Producturl */
             productUrl?: string | null;
+            /** Checkouturl */
+            checkoutUrl?: string | null;
             /** Evidencesources */
             evidenceSources?: components["schemas"]["EvidenceSource"][];
             /**

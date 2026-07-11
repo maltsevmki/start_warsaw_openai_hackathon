@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   Clipboard,
-  CreditCard,
   ExternalLink,
   LoaderCircle,
   Package,
@@ -29,7 +28,6 @@ interface DecisionPanelProps {
   onAlternative: (accepted: boolean, alternativeId?: string) => void
   onApprove: () => void
   onReject: (reason?: string) => void
-  onCheckout: () => void
   onCancel: () => void
   onSimulate: (status: OrderStatus) => void
 }
@@ -241,15 +239,16 @@ function ProposalCard({ view, actions, busy, error, onApprove, onReject, onCance
   )
 }
 
-function ApprovalReceipt({ view, actions, busy, error, onCheckout, onCancel }: CommonProps) {
+function ApprovalReceipt({ view, actions, busy, error, onCancel }: CommonProps) {
   const approval = view.approval!
+  const checkoutUrl = view.proposal?.checkoutUrl ?? view.proposal?.productUrl
   const [copied, setCopied] = useState(false)
   const copyHash = async () => { await navigator.clipboard.writeText(approval.proposalHash); setCopied(true) }
   return (
     <section className="decision-card approval-receipt">
       <div className="decision-icon success"><CheckCircle2 size={24} /></div>
       <p className="eyebrow">Consent recorded</p><h2>Approval is saved. Checkout has not run.</h2>
-      <p className="decision-lead">This separate checkpoint lets the agent revalidate price, stock, delivery, and return terms before any mock payment.</p>
+      <p className="decision-lead">Continue on the verified merchant page to recheck the live price, delivery, and payment details before placing the order.</p>
       <dl className="receipt-grid">
         <div><dt>Decision</dt><dd>{titleCase(approval.decision)}</dd></div><div><dt>Actor</dt><dd>{approval.actor}</dd></div>
         <div><dt>Recorded</dt><dd>{formatDate(approval.decidedAt)}</dd></div><div><dt>Proposal</dt><dd>Version {approval.proposalVersion}</dd></div>
@@ -258,7 +257,8 @@ function ApprovalReceipt({ view, actions, busy, error, onCheckout, onCancel }: C
       <p className="audit-summary">{approval.auditSummary}</p>
       <ActionError message={error} />
       <div className="button-row">
-        {actions.has('execute_checkout') && <button className="button button-primary button-purchase" disabled={Boolean(busy)} onClick={onCheckout}>{busy === 'checkout' ? <><LoaderCircle className="spin" size={17} /> Revalidating…</> : <><CreditCard size={17} /> Execute checkout</>}</button>}
+        {actions.has('execute_checkout') && checkoutUrl && <a className="button button-primary button-purchase" href={checkoutUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={17} /> Continue to merchant checkout</a>}
+        {actions.has('execute_checkout') && !checkoutUrl && <p className="field-error">This offer has no verified merchant checkout page.</p>}
         <CancelButton show={actions.has('cancel')} busy={Boolean(busy)} onClick={onCancel} />
       </div>
     </section>

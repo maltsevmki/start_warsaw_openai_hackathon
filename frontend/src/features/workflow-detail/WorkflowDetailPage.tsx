@@ -7,7 +7,6 @@ import {
   addWorkflowMessage,
   approveProposal,
   cancelWorkflow,
-  executeCheckout,
   getWorkflow,
   rejectProposal,
   rollbackWorkflow,
@@ -87,10 +86,6 @@ export function WorkflowDetailPage({
               onReject={(reason) => {
                 if (!view.proposal) return
                 run('reject', () => rejectProposal(workflowId, { proposalId: view.proposal!.id, reason }))
-              }}
-              onCheckout={() => {
-                if (!view.approval) return
-                run('checkout', () => executeCheckout(workflowId, view.approval!.id))
               }}
               onCancel={() => run('cancel', () => cancelWorkflow(workflowId))}
               onSimulate={(status: OrderStatus) => {

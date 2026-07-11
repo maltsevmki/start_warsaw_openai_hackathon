@@ -43,7 +43,8 @@ Set total.amount exactly to price.amount + taxesAndFees.amount.
 
 Return at most eight offers. Use stable, unique ids prefixed with "web_". Include merchantId,
 merchantName, title, brand, model when known, and productUrl pointing to the exact purchasable
-merchant page. Return only in_stock or low_stock products; never return an unavailable listing.
+merchant page that the user can continue checkout from. Return only in_stock or low_stock
+products; never return an unavailable listing.
 Every offer must include evidenceSources with the exact product-page URL and title used to verify
 its price and availability. Only cite pages actually opened by web search during this response.
 delivery.earliest must be exactly today, tomorrow, or this_week; delivery.latest must use the

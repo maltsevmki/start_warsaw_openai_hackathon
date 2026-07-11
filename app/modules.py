@@ -593,6 +593,7 @@ class ProposalModule:
         "offerId",
         "merchantName",
         "title",
+        "checkoutUrl",
         "quantity",
         "total",
         "delivery",
@@ -618,6 +619,10 @@ class ProposalModule:
             "merchantName": offer.merchant_name,
             "title": offer.title,
             "productUrl": offer.product_url,
+            # Live research only accepts an exact, grounded merchant product page.
+            # Until a merchant provides a dedicated cart/deep-link API, that page is
+            # the safest real checkout handoff we can offer.
+            "checkoutUrl": offer.product_url,
             "evidenceSources": [
                 source.model_dump(by_alias=True) for source in offer.evidence_sources
             ],
@@ -637,7 +642,7 @@ class ProposalModule:
             "returns": offer.returns.model_dump(by_alias=True),
             "warranty": offer.warranty.model_dump(by_alias=True),
             "paymentMethodLabel": profile.payment_method.label,
-            "approvalText": f"Approve a payment of {offer.total.amount:g} PLN to {offer.merchant_name} for {offer.title}.",
+            "approvalText": f"Approve these terms before continuing to {offer.merchant_name} to complete checkout for {offer.title}.",
             "expiresAt": utcnow() + timedelta(minutes=10),
             "hash": "",
         }
