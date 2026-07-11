@@ -10,7 +10,12 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app import schemas
+from app.domain.catalog import CatalogSearchResult
 from app.domain.intent import ClassificationResult
+from app.ports.catalog import CatalogModule
+
+if TYPE_CHECKING:
+    from app.settings import Settings
 
 if TYPE_CHECKING:
     from app.payments import PaymentGateway
@@ -284,14 +289,6 @@ class IntentGuardrailModule:
 
 
 @dataclass
-class CatalogSearchResult:
-    search_id: str
-    status: str
-    offers: list[schemas.Offer]
-    alternatives: list[schemas.Alternative]
-
-
-@dataclass
 class RevalidateResult:
     status: str
     offer: schemas.Offer | None = None
@@ -299,13 +296,28 @@ class RevalidateResult:
 
 
 class MockCatalogModule:
-    def __init__(self, fixture_path: Path | None = None):
+    def __init__(
+        self,
+        fixture_path: Path | None = None,
+        settings: Settings | None = None,
+        research_agent: CatalogModule | None = None,
+    ):
         path = fixture_path or Path(__file__).parent / "fixtures" / "catalog.json"
         raw = json.loads(path.read_text())
         self.offers = [schemas.Offer.model_validate(item) for group in raw.values() for item in group]
         self.by_id = {offer.id: offer for offer in self.offers}
+        self._research_agent = research_agent
+        if self._research_agent is None:
+            self._research_agent = self._build_research_agent(settings)
 
     def search(
+        self, constraints: schemas.ShoppingConstraints, profile: schemas.DemoUserProfile
+    ) -> CatalogSearchResult:
+        if self._research_agent:
+            return self._research_agent.search(constraints, profile)
+        return self.search_fixtures(constraints, profile)
+
+    def search_fixtures(
         self, constraints: schemas.ShoppingConstraints, profile: schemas.DemoUserProfile
     ) -> CatalogSearchResult:
         candidates = [
@@ -313,6 +325,18 @@ class MockCatalogModule:
             for offer in self.offers
             if offer.category == constraints.product_category
         ]
+        return self.evaluate_offers(constraints, candidates)
+
+    def evaluate_offers(
+        self,
+        constraints: schemas.ShoppingConstraints,
+        offers: list[schemas.Offer],
+        *,
+        cache: bool = False,
+    ) -> CatalogSearchResult:
+        candidates = [self._for_deadline(offer, constraints.delivery_deadline) for offer in offers]
+        if cache:
+            self.by_id.update({offer.id: offer.model_copy(deep=True) for offer in candidates})
         exact = [offer for offer in candidates if self._is_exact(offer, constraints)]
         if exact:
             return CatalogSearchResult(new_id("search"), "offers_found", candidates, [])
@@ -323,6 +347,13 @@ class MockCatalogModule:
             candidates,
             alternatives,
         )
+
+    def _build_research_agent(self, settings: Settings | None) -> CatalogModule | None:
+        from app.factories import build_catalog_research_module
+        from app.settings import Settings
+
+        configured_settings = settings or Settings.from_env()
+        return build_catalog_research_module(configured_settings, self)
 
     def get_offer(self, offer_id: str) -> schemas.Offer | None:
         offer = self.by_id.get(offer_id)
