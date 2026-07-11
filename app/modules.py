@@ -13,6 +13,7 @@ from app import schemas
 from app.domain.catalog import CatalogSearchResult
 from app.domain.intent import ClassificationResult
 from app.ports.catalog import CatalogModule
+from app.ports.comparison import ComparisonRationaleModule
 
 if TYPE_CHECKING:
     from app.settings import Settings
@@ -438,6 +439,20 @@ class MockCatalogModule:
 
 
 class ComparisonModule:
+    def __init__(
+        self,
+        rationale: ComparisonRationaleModule | None = None,
+        settings: Settings | None = None,
+    ):
+        self._rationale = rationale
+        if self._rationale is None:
+            try:
+                self._rationale = self._build_rationale(settings)
+            except Exception:
+                # The optional narrator can never prevent deterministic
+                # comparison from starting.
+                self._rationale = None
+
     def compare(
         self,
         workflow_id: str,
@@ -516,6 +531,13 @@ class ComparisonModule:
             if best
             else "No viable offer satisfies the hard requirements."
         )
+        if best and self._rationale:
+            try:
+                summary = self._rationale.explain(constraints, best)
+            except Exception:
+                # The deterministic rationale is deliberately retained if the
+                # optional narrator is unavailable or returns invalid output.
+                pass
         return schemas.ComparisonResult(
             id=new_id("cmp"),
             bestOfferId=best.offer_id if best else None,
@@ -525,6 +547,12 @@ class ComparisonModule:
             rankedOffers=ranked,
             missingEvidence=[] if best else ["No offer satisfies all hard requirements"],
         )
+
+    @staticmethod
+    def _build_rationale(settings: Settings | None) -> ComparisonRationaleModule | None:
+        from app.factories import build_comparison_rationale
+
+        return build_comparison_rationale(settings)
 
 
 class ProposalModule:
