@@ -6,10 +6,20 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app import schemas
+from app.domain.catalog import CatalogSearchResult
 from app.domain.intent import ClassificationResult
+from app.ports.catalog import CatalogModule
+from app.ports.comparison import ComparisonRationaleModule
+
+if TYPE_CHECKING:
+    from app.settings import Settings
+
+if TYPE_CHECKING:
+    from app.payments import PaymentGateway
 
 
 def utcnow() -> datetime:
@@ -79,44 +89,27 @@ class IntentGuardrailModule:
         lower = combined.lower()
         constraints = self._extract_constraints(combined)
 
-        if "prescription medicine" in lower:
-            return ClassificationResult(
-                status="policy_violation",
-                confidence=0.99,
-                block=schemas.PolicyBlock(
-                    code="requires_professional_verification",
-                    message="Prescription medicine requires verification by a licensed clinician or pharmacist and cannot be purchased autonomously.",
-                    canSuggestSaferAlternative=True,
-                ),
-            )
-        if "weapon" in lower or "illegal" in lower:
-            return ClassificationResult(
-                status="policy_violation",
-                confidence=0.99,
-                block=schemas.PolicyBlock(
-                    code="unsafe_or_illegal",
-                    message="This request involves restricted, unsafe, or illegal goods and cannot be completed.",
-                    canSuggestSaferAlternative=False,
-                ),
-            )
+        guardrail = self.check_guardrails(combined)
+        if guardrail:
+            return guardrail
 
         category = constraints.product_category
         if category == "shoes" and not re.search(r"\b(?:size\s*)?(3[5-9]|4[0-9]|5[0-2])\b", lower):
-            return self._clarification(
+            return self.clarification_result(
                 constraints,
                 "shoe_size",
                 "What shoe size should I look for? You can also add a color or intended use.",
                 ["Size 42, black", "EU 39, for running"],
             )
         if category == "clothing" and not re.search(r"\b(?:size\s*)?(xs|s|m|l|xl|xxl|\d{2})\b", lower):
-            return self._clarification(
+            return self.clarification_result(
                 constraints,
                 "clothing_size",
                 "What clothing size should I use?",
                 ["Size M", "EU 40"],
             )
         if category is None:
-            return self._clarification(
+            return self.clarification_result(
                 constraints,
                 "product_category_and_budget",
                 "What kind of product would you like, and what is your maximum budget?",
@@ -135,7 +128,42 @@ class IntentGuardrailModule:
             confidence=0.97,
         )
 
-    def _clarification(
+    def check_guardrails(self, text: str) -> ClassificationResult | None:
+        """Apply only hard application policy checks, without classifying safe intent."""
+        lower = text.lower()
+        if any(
+            phrase in lower
+            for phrase in (
+                "prescription medicine",
+                "prescription drug",
+                "controlled substance",
+                "lek na receptę",
+                "leki na receptę",
+            )
+        ):
+            return ClassificationResult(
+                status="policy_violation",
+                confidence=0.99,
+                block=schemas.PolicyBlock(
+                    code="requires_professional_verification",
+                    message="Prescription medicine requires verification by a licensed clinician or pharmacist and cannot be purchased autonomously.",
+                    canSuggestSaferAlternative=True,
+                ),
+            )
+        if re.search(r"\b(?:weapon|weapons|firearm|firearms|gun|guns|illegal)\b", lower):
+            return ClassificationResult(
+                status="policy_violation",
+                confidence=0.99,
+                block=schemas.PolicyBlock(
+                    code="unsafe_or_illegal",
+                    message="This request involves restricted, unsafe, or illegal goods and cannot be completed.",
+                    canSuggestSaferAlternative=False,
+                ),
+            )
+
+        return None
+
+    def clarification_result(
         self,
         constraints: schemas.ShoppingConstraints,
         expected_field: str,
@@ -151,8 +179,67 @@ class IntentGuardrailModule:
                 text=text,
                 expectedField=expected_field,
                 examples=examples,
+                fields=self._clarification_fields(expected_field),
             ),
         )
+
+    def _clarification_fields(self, expected_field: str) -> list[schemas.ClarificationField]:
+        if expected_field == "shoe_size":
+            return [
+                schemas.ClarificationField(
+                    name="shoe_size",
+                    label="EU shoe size",
+                    inputType="number",
+                    placeholder="42",
+                ),
+                schemas.ClarificationField(
+                    name="color",
+                    label="Preferred color",
+                    inputType="text",
+                    required=False,
+                    placeholder="Black",
+                ),
+                schemas.ClarificationField(
+                    name="intended_use",
+                    label="Intended use",
+                    inputType="text",
+                    required=False,
+                    placeholder="Comfortable walking",
+                ),
+            ]
+        if expected_field == "clothing_size":
+            return [
+                schemas.ClarificationField(
+                    name="clothing_size",
+                    label="Clothing size",
+                    inputType="single_select",
+                    options=["XS", "S", "M", "L", "XL", "XXL"],
+                    allowCustom=True,
+                    placeholder="M or EU 40",
+                )
+            ]
+        if expected_field == "product_category_and_budget":
+            return [
+                schemas.ClarificationField(
+                    name="product_category",
+                    label="Product",
+                    inputType="text",
+                    placeholder="Headphones",
+                ),
+                schemas.ClarificationField(
+                    name="budget_max",
+                    label="Maximum budget (PLN)",
+                    inputType="number",
+                    placeholder="300",
+                ),
+            ]
+        return [
+            schemas.ClarificationField(
+                name=expected_field,
+                label=expected_field.replace("_", " ").capitalize(),
+                inputType="text",
+            )
+        ]
 
     def _extract_constraints(self, text: str) -> schemas.ShoppingConstraints:
         lower = text.lower()
@@ -203,14 +290,6 @@ class IntentGuardrailModule:
 
 
 @dataclass
-class CatalogSearchResult:
-    search_id: str
-    status: str
-    offers: list[schemas.Offer]
-    alternatives: list[schemas.Alternative]
-
-
-@dataclass
 class RevalidateResult:
     status: str
     offer: schemas.Offer | None = None
@@ -218,13 +297,28 @@ class RevalidateResult:
 
 
 class MockCatalogModule:
-    def __init__(self, fixture_path: Path | None = None):
+    def __init__(
+        self,
+        fixture_path: Path | None = None,
+        settings: Settings | None = None,
+        research_agent: CatalogModule | None = None,
+    ):
         path = fixture_path or Path(__file__).parent / "fixtures" / "catalog.json"
         raw = json.loads(path.read_text())
         self.offers = [schemas.Offer.model_validate(item) for group in raw.values() for item in group]
         self.by_id = {offer.id: offer for offer in self.offers}
+        self._research_agent = research_agent
+        if self._research_agent is None:
+            self._research_agent = self._build_research_agent(settings)
 
     def search(
+        self, constraints: schemas.ShoppingConstraints, profile: schemas.DemoUserProfile
+    ) -> CatalogSearchResult:
+        if self._research_agent:
+            return self._research_agent.search(constraints, profile)
+        return self.search_fixtures(constraints, profile)
+
+    def search_fixtures(
         self, constraints: schemas.ShoppingConstraints, profile: schemas.DemoUserProfile
     ) -> CatalogSearchResult:
         candidates = [
@@ -232,6 +326,18 @@ class MockCatalogModule:
             for offer in self.offers
             if offer.category == constraints.product_category
         ]
+        return self.evaluate_offers(constraints, candidates)
+
+    def evaluate_offers(
+        self,
+        constraints: schemas.ShoppingConstraints,
+        offers: list[schemas.Offer],
+        *,
+        cache: bool = False,
+    ) -> CatalogSearchResult:
+        candidates = [self._for_deadline(offer, constraints.delivery_deadline) for offer in offers]
+        if cache:
+            self.by_id.update({offer.id: offer.model_copy(deep=True) for offer in candidates})
         exact = [offer for offer in candidates if self._is_exact(offer, constraints)]
         if exact:
             return CatalogSearchResult(new_id("search"), "offers_found", candidates, [])
@@ -242,6 +348,13 @@ class MockCatalogModule:
             candidates,
             alternatives,
         )
+
+    def _build_research_agent(self, settings: Settings | None) -> CatalogModule | None:
+        from app.factories import build_catalog_research_module
+        from app.settings import Settings
+
+        configured_settings = settings or Settings.from_env()
+        return build_catalog_research_module(configured_settings, self)
 
     def get_offer(self, offer_id: str) -> schemas.Offer | None:
         offer = self.by_id.get(offer_id)
@@ -326,6 +439,20 @@ class MockCatalogModule:
 
 
 class ComparisonModule:
+    def __init__(
+        self,
+        rationale: ComparisonRationaleModule | None = None,
+        settings: Settings | None = None,
+    ):
+        self._rationale = rationale
+        if self._rationale is None:
+            try:
+                self._rationale = self._build_rationale(settings)
+            except Exception:
+                # The optional narrator can never prevent deterministic
+                # comparison from starting.
+                self._rationale = None
+
     def compare(
         self,
         workflow_id: str,
@@ -404,6 +531,13 @@ class ComparisonModule:
             if best
             else "No viable offer satisfies the hard requirements."
         )
+        if best and self._rationale:
+            try:
+                summary = self._rationale.explain(constraints, best)
+            except Exception:
+                # The deterministic rationale is deliberately retained if the
+                # optional narrator is unavailable or returns invalid output.
+                pass
         return schemas.ComparisonResult(
             id=new_id("cmp"),
             bestOfferId=best.offer_id if best else None,
@@ -413,6 +547,12 @@ class ComparisonModule:
             rankedOffers=ranked,
             missingEvidence=[] if best else ["No offer satisfies all hard requirements"],
         )
+
+    @staticmethod
+    def _build_rationale(settings: Settings | None) -> ComparisonRationaleModule | None:
+        from app.factories import build_comparison_rationale
+
+        return build_comparison_rationale(settings)
 
 
 class ProposalModule:
@@ -530,8 +670,13 @@ class CheckoutResult:
 
 
 class MockCheckoutModule:
-    def __init__(self, catalog: MockCatalogModule):
+    def __init__(self, catalog: MockCatalogModule, gateway: "PaymentGateway | None" = None):
         self.catalog = catalog
+        if gateway is None:
+            from app.payments import default_gateway
+
+            gateway = default_gateway()
+        self.gateway = gateway
 
     def execute(
         self,
@@ -558,6 +703,17 @@ class MockCheckoutModule:
         if revalidated.offer and revalidated.offer.demo_behavior == "payment_failed":
             return self._failure(attempt_id, workflow_id, proposal.id, approval, "payment_failed")
 
+        payment = self.gateway.authorize(
+            amount=proposal.total.amount,
+            currency=proposal.total.currency,
+            description=f"{proposal.title} ({proposal.id})",
+            idempotency_key=f"{workflow_id}:{proposal.id}:{approval.id}",
+        )
+        if payment.status != "succeeded":
+            return self._failure(
+                attempt_id, workflow_id, proposal.id, approval, payment.failure_reason or "payment_failed"
+            )
+
         merchant_ref = f"DEMO-{uuid4().hex[:8].upper()}"
         attempt = schemas.CheckoutAttempt(
             id=attempt_id,
@@ -565,7 +721,7 @@ class MockCheckoutModule:
             proposalId=proposal.id,
             approvalId=approval.id,
             status="succeeded",
-            paymentAuthorizationId=new_id("pay"),
+            paymentAuthorizationId=payment.authorization_id or new_id("pay"),
             merchantOrderRef=merchant_ref,
             receipt={"receiptId": new_id("receipt"), "total": proposal.total, "paidAt": utcnow()},
         )

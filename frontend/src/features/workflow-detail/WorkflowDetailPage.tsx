@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ApiError } from '../../api/client'
 import { workflowKeys } from '../../api/query-keys'
-import type { OrderStatus, WorkflowView } from '../../api/types'
+import type { ClarificationReply, OrderStatus, WorkflowView } from '../../api/types'
 import {
   addWorkflowMessage,
   approveProposal,
@@ -10,11 +10,13 @@ import {
   executeCheckout,
   getWorkflow,
   rejectProposal,
+  rollbackWorkflow,
   respondToAlternative,
   selectOffer,
   simulateOrderStatus,
 } from '../../api/workflow-api'
 import { DecisionPanel } from '../../components/workflow/DecisionPanel'
+import { WorkflowHistoryGraph } from '../../components/workflow/WorkflowHistoryGraph'
 import {
   AuditTrail,
   ComparisonSection,
@@ -64,13 +66,19 @@ export function WorkflowDetailPage({
     <main className="workflow-page">
       <div className="page-width workflow-stack">
         <WorkflowHeader workflow={view.workflow} />
+        <WorkflowHistoryGraph
+          history={view.history}
+          allowRollback={view.workflow.availableActions.includes('rollback')}
+          busy={busy === 'rollback'}
+          onRollback={(revisionId) => run('rollback', () => rollbackWorkflow(workflowId, revisionId))}
+        />
         <div className="workflow-layout">
           <div className="workflow-main">
             <DecisionPanel
               view={view}
               busy={busy}
               error={message}
-              onClarify={(reply) => run('clarify', () => addWorkflowMessage(workflowId, reply))}
+              onClarify={(reply: ClarificationReply) => run('clarify', () => addWorkflowMessage(workflowId, reply))}
               onAlternative={(accepted, alternativeId) => run('alternative', () => respondToAlternative(workflowId, { accepted, ...(alternativeId ? { alternativeId } : {}) }))}
               onApprove={() => {
                 if (!view.proposal) return

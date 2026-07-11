@@ -55,6 +55,11 @@ def test_all_happy_path_http_endpoints():
 
 def test_clarification_and_alternative_http_endpoints():
     clarification = client.post("/api/workflows", json={"prompt": "Buy me shoes for tomorrow."}).json()
+    assert [field["name"] for field in clarification["clarification"]["fields"]] == [
+        "shoe_size",
+        "color",
+        "intended_use",
+    ]
     replied = client.post(
         f"/api/workflows/{clarification['workflow']['id']}/messages",
         json={"message": "Size 42, black, comfortable for walking."},
@@ -72,6 +77,40 @@ def test_clarification_and_alternative_http_endpoints():
     )
     assert accepted.status_code == 200
     assert accepted.json()["proposal"]["offerId"] == "offer_headphones_tomorrow"
+
+
+def test_structured_clarification_answers_are_bound_to_active_question():
+    view = client.post("/api/workflows", json={"prompt": "Buy me shoes for tomorrow."}).json()
+    workflow_id = view["workflow"]["id"]
+    question_id = view["clarification"]["id"]
+
+    stale = client.post(
+        f"/api/workflows/{workflow_id}/messages",
+        json={
+            "questionId": "clar_stale",
+            "answers": [{"field": "shoe_size", "value": "42"}],
+        },
+    )
+    assert stale.status_code == 409
+    assert "stale" in stale.json()["detail"].lower()
+
+    replied = client.post(
+        f"/api/workflows/{workflow_id}/messages",
+        json={
+            "questionId": question_id,
+            "answers": [
+                {"field": "shoe_size", "value": "42"},
+                {"field": "color", "value": "black"},
+                {"field": "intended_use", "value": "comfortable walking"},
+            ],
+        },
+    )
+    assert replied.status_code == 200
+    body = replied.json()
+    assert body["workflow"]["state"] == "awaiting_approval"
+    message_event = next(event for event in body["events"] if event["type"] == "message.received")
+    assert message_event["data"]["questionId"] == question_id
+    assert message_event["data"]["answerFields"] == ["shoe_size", "color", "intended_use"]
 
 
 def test_guardrail_reject_and_cancel_are_usable():

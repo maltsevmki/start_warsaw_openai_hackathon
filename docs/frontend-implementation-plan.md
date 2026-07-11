@@ -136,8 +136,9 @@ Always gate interactive controls with `workflow.availableActions`. State determi
 
 ### `ClarificationCard`
 
-- Display `clarification.text` and example reply chips.
-- Let an example populate the input without automatically submitting it.
+- Display `clarification.text` and render `clarification.fields` when present.
+- Retain example reply chips and the free-text input as the fallback for legacy questions.
+- Submit form-backed answers with the current `questionId`; never reuse a stale question ID.
 - Disable submission while the mutation is pending.
 - On success, replace the cached workflow with the returned view.
 

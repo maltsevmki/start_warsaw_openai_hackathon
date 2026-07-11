@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 Currency = Literal["PLN"]
@@ -35,6 +35,7 @@ WorkflowAction = Literal[
     "execute_checkout",
     "simulate_tracking",
     "cancel",
+    "rollback",
 ]
 OrderStatus = Literal[
     "order_created",
@@ -92,11 +93,27 @@ class DemoUserProfile(APIModel):
     payment_method: PaymentMethod = Field(alias="paymentMethod")
 
 
+class ClarificationField(APIModel):
+    name: str
+    label: str
+    input_type: Literal["text", "number", "single_select"] = Field(alias="inputType")
+    required: bool = True
+    placeholder: str | None = None
+    options: list[str] = Field(default_factory=list)
+    allow_custom: bool = Field(default=True, alias="allowCustom")
+
+
 class ClarificationQuestion(APIModel):
     id: str
     text: str
     expected_field: str = Field(alias="expectedField")
     examples: list[str]
+    fields: list[ClarificationField] = Field(default_factory=list)
+
+
+class ClarificationAnswer(APIModel):
+    field: str = Field(min_length=1, max_length=100)
+    value: str = Field(min_length=1, max_length=500)
 
 
 class PolicyBlock(APIModel):
@@ -306,6 +323,26 @@ class WorkflowSummary(APIModel):
     available_actions: list[WorkflowAction] = Field(alias="availableActions")
 
 
+class WorkflowRevision(APIModel):
+    id: str
+    workflow_id: str = Field(alias="workflowId")
+    parent_revision_id: str | None = Field(default=None, alias="parentRevisionId")
+    rollback_from_revision_id: str | None = Field(default=None, alias="rollbackFromRevisionId")
+    sequence: int
+    state: WorkflowState
+    action: str
+    label: str
+    summary: str
+    created_at: datetime = Field(alias="createdAt")
+    is_current: bool = Field(alias="isCurrent")
+    can_rollback: bool = Field(alias="canRollback")
+
+
+class WorkflowHistory(APIModel):
+    current_revision_id: str = Field(alias="currentRevisionId")
+    revisions: list[WorkflowRevision]
+
+
 class WorkflowView(APIModel):
     workflow: WorkflowSummary
     clarification: ClarificationQuestion | None = None
@@ -318,6 +355,7 @@ class WorkflowView(APIModel):
     checkout: CheckoutAttempt | None = None
     order: Order | None = None
     events: list[DomainEvent]
+    history: WorkflowHistory
 
 
 class StartWorkflowRequest(APIModel):
@@ -325,7 +363,17 @@ class StartWorkflowRequest(APIModel):
 
 
 class AddMessageRequest(APIModel):
-    message: str = Field(min_length=1, max_length=1000)
+    message: str | None = Field(default=None, min_length=1, max_length=1000)
+    question_id: str | None = Field(default=None, alias="questionId")
+    answers: list[ClarificationAnswer] | None = Field(default=None, min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def require_one_answer_shape(self):
+        if (self.message is None) == (self.answers is None):
+            raise ValueError("Provide exactly one of message or answers")
+        if self.answers is not None and self.question_id is None:
+            raise ValueError("questionId is required with structured answers")
+        return self
 
 
 class AcceptAlternativeRequest(APIModel):
@@ -351,6 +399,10 @@ class SelectOfferRequest(APIModel):
 
 class CheckoutRequest(APIModel):
     approval_id: str = Field(alias="approvalId")
+
+
+class RollbackWorkflowRequest(APIModel):
+    revision_id: str = Field(alias="revisionId")
 
 
 class SimulateStatusRequest(APIModel):

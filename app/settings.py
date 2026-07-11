@@ -22,6 +22,13 @@ class Settings:
     openai_intent_model: str
     openai_timeout_seconds: float
     openai_fallback_to_mock: bool
+    payments_provider: str = "mock"
+    stripe_secret_key: str | None = None
+    stripe_test_payment_method: str = "pm_card_visa"
+    catalog_provider: str = "mock"
+    openai_research_model: str = "gpt-5-mini"
+    comparison_provider: str = "mock"
+    openai_comparison_model: str = "gpt-5-mini"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -31,4 +38,11 @@ class Settings:
             openai_intent_model=os.getenv("OPENAI_INTENT_MODEL", "gpt-5-mini"),
             openai_timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")),
             openai_fallback_to_mock=_as_bool(os.getenv("OPENAI_FALLBACK_TO_MOCK"), True),
+            payments_provider=os.getenv("PAYMENTS_PROVIDER", "mock").strip().lower(),
+            stripe_secret_key=os.getenv("STRIPE_SECRET_KEY") or None,
+            stripe_test_payment_method=os.getenv("STRIPE_TEST_PAYMENT_METHOD", "pm_card_visa"),
+            catalog_provider=os.getenv("CATALOG_PROVIDER", "mock").strip().lower(),
+            openai_research_model=os.getenv("OPENAI_RESEARCH_MODEL", "gpt-5-mini"),
+            comparison_provider=os.getenv("COMPARISON_PROVIDER", "mock").strip().lower(),
+            openai_comparison_model=os.getenv("OPENAI_COMPARISON_MODEL", "gpt-5-mini"),
         )

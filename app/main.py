@@ -94,7 +94,12 @@ def get_workflow(workflow_id: str):
     response_model_exclude_none=True,
 )
 def add_message(workflow_id: str, body: schemas.AddMessageRequest):
-    return orchestrator.add_user_message(workflow_id, body.message)
+    return orchestrator.add_user_message(
+        workflow_id,
+        message=body.message,
+        question_id=body.question_id,
+        answers=body.answers,
+    )
 
 
 @app.post(
@@ -156,6 +161,15 @@ def execute_checkout(workflow_id: str, body: schemas.CheckoutRequest):
 )
 def cancel_workflow(workflow_id: str):
     return orchestrator.cancel_workflow(workflow_id)
+
+
+@app.post(
+    "/api/workflows/{workflow_id}/rollback",
+    response_model=schemas.WorkflowView,
+    response_model_exclude_none=True,
+)
+def rollback_workflow(workflow_id: str, body: schemas.RollbackWorkflowRequest):
+    return orchestrator.rollback_workflow(workflow_id, body.revision_id)
 
 
 @app.get("/api/workflows/{workflow_id}/events", response_model=schemas.EventsResponse)

@@ -13,6 +13,11 @@ export type Approval = components['schemas']['Approval']
 export type Order = components['schemas']['Order']
 export type OrderStatus = Order['status']
 export type DomainEvent = components['schemas']['DomainEvent']
+export type WorkflowRevision = components['schemas']['WorkflowRevision']
+export type ClarificationAnswer = components['schemas']['ClarificationAnswer']
+export type ClarificationReply =
+  | { message: string }
+  | { questionId: string; answers: ClarificationAnswer[] }
 
 export interface DemoScenarios {
   happyPath: string

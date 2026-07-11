@@ -51,7 +51,7 @@ OPENAI_INTENT_MODEL=gpt-5-mini
 OPENAI_FALLBACK_TO_MOCK=true
 ```
 
-The key is read only from the environment and `.env` is ignored by Git. Deterministic policy and missing-detail checks run before the model. Structured-output validation runs after it. When fallback is enabled, temporary OpenAI failures use the existing offline extractor so the demo stays usable.
+The key is read only from the environment and `.env` is ignored by Git. Hard application-policy checks run deterministically before the model. Safe requests, including incomplete ones, are classified with a strict Pydantic structured output; application invariants are checked again afterward. When fallback is enabled, temporary OpenAI failures use the existing offline extractor so the demo stays usable. The `prompt.classified` audit event records whether the result came from `openai`, `deterministic`, or `fallback` processing.
 
 ## Frontend API
 
@@ -65,10 +65,27 @@ The key is read only from the environment and `.env` is ignored by Git. Determin
 | `POST` | `/api/workflows/{workflowId}/reject` | Reject the current proposal |
 | `POST` | `/api/workflows/{workflowId}/checkout` | Execute approval-bound checkout |
 | `POST` | `/api/workflows/{workflowId}/cancel` | Execute the advertised `cancel` action |
+| `POST` | `/api/workflows/{workflowId}/rollback` | Restore an immutable workflow revision and create a new branch |
 | `GET` | `/api/workflows/{workflowId}/events` | Fetch the trust/audit trail |
 | `POST` | `/api/orders/{orderId}/simulate-status` | Advance mocked order tracking |
 
 All JSON uses the camelCase field names from the shared frontend contract. Optional sections are omitted until they exist, and `workflow.availableActions` tells the UI what it can safely render at every state.
+
+Clarifications include a renderable `fields` array. The existing free-text reply remains supported, while form clients can bind an answer to the active question:
+
+```json
+{
+  "questionId": "clar_...",
+  "answers": [
+    {"field": "shoe_size", "value": "42"},
+    {"field": "color", "value": "black"}
+  ]
+}
+```
+
+The backend rejects stale question IDs, unknown or duplicate fields, missing required fields, and invalid numeric values before reclassifying the request.
+
+Every completed user-visible mutation adds an immutable entry to `history.revisions`. Send a prior `revisionId` to the rollback endpoint to restore its complete canonical snapshot. The restore is recorded as a new child revision, so abandoned branches remain visible and the domain-event audit log stays append-only. In the fully mocked checkout flow, restoring a pre-order revision records a compensating mock cancellation before clearing order data; a real commerce adapter must replace that rule with an actual merchant-side compensation or reject the rollback.
 
 ## Required demo scenarios
 

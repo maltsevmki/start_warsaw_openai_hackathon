@@ -43,6 +43,19 @@ def test_intent_classifies_required_scenarios(profile, prompt, status):
     assert IntentGuardrailModule().classify(prompt, [], profile).status == status
 
 
+def test_deterministic_guardrail_handles_localized_prescription_request(profile):
+    result = IntentGuardrailModule().classify("Kup mi leki na receptę", [], profile)
+    assert result.status == "policy_violation"
+    assert result.block.code == "requires_professional_verification"
+
+
+def test_shoe_clarification_exposes_renderable_form(profile):
+    result = IntentGuardrailModule().classify(CLARIFICATION_PROMPT, [], profile)
+    assert result.question.expected_field == "shoe_size"
+    assert result.question.fields[0].name == "shoe_size"
+    assert result.question.fields[0].required is True
+
+
 def test_catalog_and_comparison_choose_happy_monitor(profile):
     classification = IntentGuardrailModule().classify(HAPPY_PROMPT, [], profile)
     search = MockCatalogModule().search(classification.constraints, profile)
@@ -122,3 +135,58 @@ def test_orchestrator_happy_path_stops_for_human_approval():
     assert view.proposal.offer_id == "offer_monitor_happy"
     assert "approve_proposal" in view.workflow.available_actions
     assert any(event.type == "proposal.created" for event in view.events)
+
+
+def test_rollback_restores_snapshot_and_preserves_abandoned_branch():
+    orchestrator = WorkflowOrchestrator()
+    initial = orchestrator.start_workflow(CLARIFICATION_PROMPT)
+    initial_revision_id = initial.history.current_revision_id
+
+    answered = orchestrator.add_user_message(
+        initial.workflow.id,
+        message="Size 42, black, comfortable for walking.",
+    )
+    abandoned_revision_id = answered.history.current_revision_id
+    assert answered.workflow.state == "awaiting_approval"
+
+    restored = orchestrator.rollback_workflow(initial.workflow.id, initial_revision_id)
+
+    assert restored.workflow.state == "needs_clarification"
+    assert restored.clarification is not None
+    assert restored.proposal is None
+    assert restored.comparison is None
+    assert "rollback" in restored.workflow.available_actions
+    assert {item.id for item in restored.history.revisions} >= {
+        initial_revision_id,
+        abandoned_revision_id,
+    }
+    current = next(item for item in restored.history.revisions if item.is_current)
+    assert current.parent_revision_id == initial_revision_id
+    assert current.rollback_from_revision_id == abandoned_revision_id
+    assert any(event.type == "workflow.rollback_performed" for event in restored.events)
+    assert any(
+        event.type == "workflow.state_changed" and event.data.get("reason") == "rollback"
+        for event in restored.events
+    )
+
+
+def test_rollback_after_checkout_records_mock_compensation():
+    orchestrator = WorkflowOrchestrator()
+    proposed = orchestrator.start_workflow(HAPPY_PROMPT)
+    proposal_revision_id = proposed.history.current_revision_id
+    approved = orchestrator.approve_proposal(
+        proposed.workflow.id,
+        proposed.proposal.id,
+        proposed.proposal.version,
+        proposed.proposal.hash,
+    )
+    tracking = orchestrator.execute_checkout(proposed.workflow.id, approved.approval.id)
+
+    restored = orchestrator.rollback_workflow(proposed.workflow.id, proposal_revision_id)
+
+    assert tracking.order is not None
+    assert restored.workflow.state == "awaiting_approval"
+    assert restored.order is None
+    assert restored.checkout is None
+    assert restored.approval is None
+    assert any(event.type == "rollback.compensation_recorded" for event in restored.events)

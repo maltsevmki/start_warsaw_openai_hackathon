@@ -17,6 +17,13 @@ const baseView = {
   },
   guardrail: { code: 'restricted_product', message: 'Prescription medicine requires professional verification.', canSuggestSaferAlternative: true },
   events: [],
+  history: {
+    currentRevisionId: 'rev_1',
+    revisions: [{
+      id: 'rev_1', workflowId: 'wf_test', sequence: 1, state: 'blocked_by_policy', action: 'workflow_started',
+      label: 'Request processed', summary: 'Stopped by policy', createdAt: '2026-01-01T00:00:00Z', isCurrent: true, canRollback: false,
+    }],
+  },
 } satisfies WorkflowView
 
 const handlers = { onClarify: vi.fn(), onAlternative: vi.fn(), onApprove: vi.fn(), onReject: vi.fn(), onCheckout: vi.fn(), onCancel: vi.fn(), onSimulate: vi.fn() }

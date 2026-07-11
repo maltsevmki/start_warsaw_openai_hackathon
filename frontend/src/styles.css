@@ -50,7 +50,7 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -2; pointer-even
 body::after { content: ""; position: fixed; width: 520px; height: 520px; top: 22%; right: -330px; z-index: -1; pointer-events: none; border: 1px solid color-mix(in srgb, var(--green) 8%, transparent); border-radius: 50%; box-shadow: 0 0 120px color-mix(in srgb, var(--green) 5%, transparent) inset; }
 button, input, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 35%, transparent); outline-offset: 3px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 35%, transparent); outline-offset: 3px; }
 a { color: inherit; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .page-width { width: min(1200px, calc(100% - 48px)); margin-inline: auto; }
@@ -150,10 +150,10 @@ a { color: inherit; }
 .site-footer p { margin: 0; }
 .brand-footer { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 12px; font-weight: 800; }
 
-.workflow-page { padding: 30px 0 80px; }
-.workflow-stack { display: grid; gap: 16px; }
-.workflow-hero, .content-card, .decision-card, .audit-card { border: 1px solid var(--line); background: var(--paper); box-shadow: 0 4px 18px rgba(25, 57, 47, .035); }
-.workflow-hero { border-radius: 18px; padding: 22px 24px 19px; }
+.workflow-page { padding: 38px 0 80px; }
+.workflow-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+.workflow-hero, .content-card, .decision-card, .audit-card { border: 1px solid var(--line); background: var(--paper); box-shadow: 0 8px 28px rgba(38,58,50,.045); }
+.workflow-hero { border-radius: 18px; padding: 24px 26px 20px; }
 .workflow-hero-top { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
 .workflow-hero h1 { max-width: 780px; margin: 0; font-size: clamp(22px, 3vw, 30px); font-weight: 750; line-height: 1.2; letter-spacing: -.035em; }
 .state-badge { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--green) 25%, var(--line)); border-radius: 99px; padding: 8px 12px; color: var(--green); background: var(--green-pale); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
@@ -180,7 +180,35 @@ a { color: inherit; }
 .section-heading, .heading-group { display: flex; align-items: center; gap: 11px; }
 .section-heading h2, .audit-heading h2 { margin: 0; font-size: 19px; letter-spacing: -.025em; }
 .icon-tile { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; color: var(--green); background: var(--green-pale); }
-.request-card blockquote { margin: 19px 0 17px; border-left: 2px solid var(--green); padding: 2px 0 2px 15px; color: var(--ink-soft); font-size: 14px; line-height: 1.65; }
+
+.history-card { min-width: 0; overflow: hidden; }
+.history-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.history-heading h2 { margin: 0; font-family: var(--serif); font-size: 19px; }
+.history-heading > span { flex-shrink: 0; color: var(--ink-faint); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.history-intro { margin: 13px 0 17px; color: var(--ink-soft); font-size: 11px; line-height: 1.5; }
+.revision-tree { overflow-x: auto; padding: 5px 5px 13px; }
+.revision-branch { position: relative; display: flex; align-items: center; gap: 28px; width: max-content; }
+.revision-children { position: relative; display: grid; gap: 9px; padding-left: 24px; }
+.revision-children::before { content: ""; position: absolute; left: 0; top: 21px; bottom: 21px; width: 1px; background: var(--line-strong); }
+.revision-children::after { content: ""; position: absolute; left: -28px; top: 50%; width: 28px; height: 1px; background: var(--line-strong); }
+.revision-children > .revision-branch::before { content: ""; position: absolute; left: -24px; top: 50%; width: 24px; height: 1px; background: var(--line-strong); }
+.revision-node { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 194px; min-height: 50px; border: 1px solid var(--line); border-radius: 11px; padding: 8px 10px; color: var(--ink); text-align: left; background: var(--paper); cursor: pointer; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.revision-node:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--green) 40%, var(--line)); }
+.revision-node.selected { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-pale); }
+.revision-node.current { background: color-mix(in srgb, var(--green-pale) 38%, var(--paper)); }
+.revision-sequence { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; color: var(--green); background: var(--green-pale); font-size: 9px; font-weight: 700; }
+.revision-node-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.revision-node-copy strong { overflow: hidden; text-overflow: ellipsis; font-size: 10px; white-space: nowrap; }
+.revision-node-copy small { color: var(--ink-faint); font-size: 8px; }
+.revision-current-dot { width: 8px; height: 8px; border: 2px solid var(--paper); border-radius: 50%; background: var(--green); box-shadow: 0 0 0 1px var(--green); }
+.revision-jump { position: absolute; top: -7px; right: 8px; border-radius: 99px; padding: 2px 5px; color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, var(--paper)); font-size: 7px; font-weight: 700; }
+.revision-selection { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-top: 1px solid var(--line); padding-top: 15px; }
+.revision-selection > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.revision-selection > div span { color: var(--green); font-size: 8px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.revision-selection > div strong { font-size: 11px; }
+.revision-selection > div small { overflow: hidden; text-overflow: ellipsis; color: var(--ink-faint); font-size: 9px; white-space: nowrap; }
+.current-revision-label { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--green); font-size: 10px; font-weight: 700; }
+.request-card blockquote { margin: 19px 0 17px; border-left: 2px solid var(--green); padding: 2px 0 2px 15px; color: var(--ink-soft); font-family: var(--serif); font-size: 16px; line-height: 1.55; }
 .constraint-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .constraint-grid > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; background: color-mix(in srgb, var(--cream) 65%, var(--paper)); }
 .constraint-grid span, .proposal-facts span, .line-items span, .receipt-grid dt { color: var(--ink-faint); font-size: 10px; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; }
@@ -191,10 +219,14 @@ a { color: inherit; }
 .decision-card > h2 { max-width: 680px; margin: 0; font-size: clamp(22px, 3vw, 29px); line-height: 1.22; letter-spacing: -.035em; }
 .decision-icon { display: grid; place-items: center; width: 45px; height: 45px; border-radius: 14px; color: var(--amber); background: color-mix(in srgb, var(--amber) 11%, var(--paper)); }
 .decision-icon.success { color: var(--green); background: var(--green-pale); }
-.decision-lead { max-width: 680px; margin: 12px 0 20px; color: var(--ink-soft); font-size: 13px; line-height: 1.7; }
-.decision-card label:not(.alternative-option) { display: block; margin: 15px 0 7px; color: var(--ink-soft); font-size: 12px; font-weight: 700; }
-.decision-card input:not([type=radio]), .decision-card textarea { width: 100%; min-height: 44px; border: 1px solid var(--line-strong); border-radius: 11px; padding: 11px 13px; color: var(--ink); background: var(--cream); font-size: 12px; }
+.decision-lead { max-width: 660px; margin: 12px 0 20px; color: var(--ink-soft); font-size: 13px; line-height: 1.65; }
+.decision-card label:not(.alternative-option) { display: block; margin: 15px 0 6px; color: var(--ink-soft); font-size: 10px; font-weight: 700; }
+.decision-card input:not([type=radio]), .decision-card select, .decision-card textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 10px; padding: 11px 13px; color: var(--ink); background: var(--paper); font-size: 12px; }
 .decision-card textarea { min-height: 86px; resize: vertical; }
+.clarification-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.clarification-field:first-child, .clarification-examples { grid-column: 1 / -1; }
+.clarification-field label span { color: var(--ink-faint); font-weight: 500; }
+.clarification-examples { margin: 10px 0 0; color: var(--ink-faint); font-size: 10px; }
 .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; }
 .example-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .example-chips button { min-height: 38px; border: 1px solid var(--line); border-radius: 99px; padding: 8px 12px; color: var(--green); background: var(--paper); font-size: 11px; cursor: pointer; }
@@ -322,11 +354,19 @@ a { color: inherit; }
   .how-grid { grid-template-columns: 1fr; }.how-grid article { min-height: 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .site-footer > div { flex-direction: column; text-align: center; }
   .workflow-page { padding-top: 18px; }.workflow-hero { padding: 19px 17px; }.workflow-hero-top { flex-direction: column; }.workflow-meta { gap: 7px 12px; }
-  .progress-track { overflow-x: auto; padding: 0 30px 7px; margin-inline: -17px; }.progress-track li { min-width: 82px; }.progress-track li small { font-size: 10px; }
+  .revision-tree { overflow: visible; }
+  .revision-branch { display: block; width: 100%; }
+  .revision-children { margin-top: 9px; padding-left: 24px; }
+  .revision-children::before { left: 10px; top: -9px; bottom: 25px; }
+  .revision-children::after { display: none; }
+  .revision-children > .revision-branch::before { left: -14px; top: 25px; width: 14px; }
+  .revision-node { width: 100%; }
+  .revision-selection { align-items: stretch; flex-direction: column; }.revision-selection .button { width: 100%; }
+  .progress-track { overflow-x: auto; padding-bottom: 5px; }.progress-track li { min-width: 67px; }.progress-track li small { font-size: 8px; }
   .content-card, .decision-card { padding: 18px; }.constraint-grid { grid-template-columns: 1fr 1fr; }
   .proposal-card { padding: 0; }.proposal-title { flex-direction: column; }.proposal-facts { grid-template-columns: 1fr 1fr; }.proposal-facts > div:nth-child(2) { border-right: 0; }.proposal-facts > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
   .receipt-grid { grid-template-columns: 1fr 1fr; }.order-meta { grid-template-columns: 1fr; }.order-timeline { flex-direction: column; gap: 0; }.order-timeline li { flex-direction: row; padding-bottom: 17px; }.order-timeline li::before { left: 13px; top: 29px; bottom: 0; width: 2px; height: auto; }.order-timeline li div { padding-top: 3px; }
   .alternative-option { grid-template-columns: auto 1fr; }.change-chip { grid-column: 2; justify-self: start; }
   .offer-card { grid-template-columns: 30px 1fr; }.offer-action { grid-column: 2; min-width: 0; align-items: flex-start; flex-direction: row; }.offer-action button { margin-left: auto; }
 }
-@media (max-width: 430px) { .scenario-grid { grid-template-columns: 1fr; }.scenario-card { min-height: 185px; }.button-row .button { width: 100%; }.proposal-facts, .receipt-grid, .constraint-grid { grid-template-columns: 1fr; }.proposal-facts > div { border-right: 0; border-bottom: 1px solid var(--line); } }
+@media (max-width: 430px) { .scenario-grid { grid-template-columns: 1fr; }.scenario-card { min-height: 205px; }.scenario-icon { margin-bottom: 20px; }.button-row .button { width: 100%; }.proposal-facts, .receipt-grid, .constraint-grid, .clarification-form { grid-template-columns: 1fr; }.proposal-facts > div { border-right: 0; border-bottom: 1px solid var(--line); } }
