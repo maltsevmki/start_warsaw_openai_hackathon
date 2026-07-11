@@ -323,6 +323,27 @@ class WorkflowSummary(APIModel):
     available_actions: list[WorkflowAction] = Field(alias="availableActions")
 
 
+class WorkflowRevisionFact(APIModel):
+    label: str
+    value: str
+
+
+class WorkflowRevisionDecision(APIModel):
+    kind: Literal[
+        "clarification",
+        "alternative",
+        "proposal",
+        "approval",
+        "checkout_failure",
+        "order",
+        "policy",
+        "result",
+    ]
+    title: str
+    description: str | None = None
+    facts: list[WorkflowRevisionFact] = Field(default_factory=list)
+
+
 class WorkflowRevision(APIModel):
     id: str
     workflow_id: str = Field(alias="workflowId")
@@ -333,6 +354,7 @@ class WorkflowRevision(APIModel):
     action: str
     label: str
     summary: str
+    decision: WorkflowRevisionDecision | None = None
     created_at: datetime = Field(alias="createdAt")
     is_current: bool = Field(alias="isCurrent")
     can_rollback: bool = Field(alias="canRollback")

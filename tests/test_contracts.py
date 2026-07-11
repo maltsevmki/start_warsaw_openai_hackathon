@@ -135,12 +135,18 @@ def test_orchestrator_happy_path_stops_for_human_approval():
     assert view.proposal.offer_id == "offer_monitor_happy"
     assert "approve_proposal" in view.workflow.available_actions
     assert any(event.type == "proposal.created" for event in view.events)
+    decision = view.history.revisions[0].decision
+    assert decision.kind == "proposal"
+    assert decision.title == view.proposal.approval_text
+    assert {fact.label for fact in decision.facts} >= {"Product", "Merchant", "Total"}
 
 
 def test_rollback_restores_snapshot_and_preserves_abandoned_branch():
     orchestrator = WorkflowOrchestrator()
     initial = orchestrator.start_workflow(CLARIFICATION_PROMPT)
     initial_revision_id = initial.history.current_revision_id
+    assert initial.history.revisions[0].decision.kind == "clarification"
+    assert initial.history.revisions[0].decision.title == initial.clarification.text
 
     answered = orchestrator.add_user_message(
         initial.workflow.id,

@@ -737,6 +737,7 @@ class WorkflowOrchestrator:
             action=action,
             label=label,
             summary=record.workflow.summary,
+            decision=self._revision_decision(record),
             createdAt=utcnow(),
             isCurrent=True,
             canRollback=False,
@@ -745,6 +746,128 @@ class WorkflowOrchestrator:
         record.current_revision_id = revision_id
         self._refresh_actions(record)
         record.revisions[-1].snapshot = self._snapshot(record)
+
+    def _revision_decision(
+        self, record: WorkflowRecord
+    ) -> schemas.WorkflowRevisionDecision | None:
+        if record.guardrail:
+            return schemas.WorkflowRevisionDecision(
+                kind="policy",
+                title=record.guardrail.message,
+                description="The request stopped before product research or checkout.",
+                facts=[
+                    schemas.WorkflowRevisionFact(
+                        label="Policy code",
+                        value=record.guardrail.code.replace("_", " ").title(),
+                    )
+                ],
+            )
+        if record.clarification:
+            requested_fields = record.clarification.fields or []
+            facts = [
+                schemas.WorkflowRevisionFact(
+                    label="Required information",
+                    value=", ".join(field.label for field in requested_fields if field.required)
+                    or record.clarification.expected_field.replace("_", " ").title(),
+                )
+            ]
+            if record.clarification.examples:
+                facts.append(
+                    schemas.WorkflowRevisionFact(
+                        label="Examples",
+                        value=" · ".join(record.clarification.examples),
+                    )
+                )
+            return schemas.WorkflowRevisionDecision(
+                kind="clarification",
+                title=record.clarification.text,
+                description="The agent paused research until the user answers this question.",
+                facts=facts,
+            )
+        if record.alternatives:
+            return schemas.WorkflowRevisionDecision(
+                kind="alternative",
+                title="Which constraint change should the agent use?",
+                description="No exact match was found; each option changes the original request explicitly.",
+                facts=[
+                    schemas.WorkflowRevisionFact(
+                        label=item.reason.replace("_", " ").title(),
+                        value=item.message,
+                    )
+                    for item in record.alternatives
+                ],
+            )
+        if record.checkout and record.checkout.status == "failed":
+            reason = record.checkout.failure_reason or "unknown"
+            return schemas.WorkflowRevisionDecision(
+                kind="checkout_failure",
+                title=f"Checkout stopped: {reason.replace('_', ' ')}",
+                description="No new order was created by this checkout attempt.",
+                facts=[
+                    schemas.WorkflowRevisionFact(label="Attempt", value=record.checkout.id),
+                    schemas.WorkflowRevisionFact(label="Reason", value=reason.replace("_", " ").title()),
+                ],
+            )
+        if record.order:
+            facts = [
+                schemas.WorkflowRevisionFact(
+                    label="Status", value=record.order.status.replace("_", " ").title()
+                ),
+                schemas.WorkflowRevisionFact(
+                    label="Total",
+                    value=f"{record.order.total.amount:g} {record.order.total.currency}",
+                ),
+                schemas.WorkflowRevisionFact(label="Delivery", value=record.order.delivery_label),
+            ]
+            if record.order.tracking_number:
+                facts.append(
+                    schemas.WorkflowRevisionFact(
+                        label="Tracking", value=record.order.tracking_number
+                    )
+                )
+            return schemas.WorkflowRevisionDecision(
+                kind="order",
+                title=f"{record.order.title}: {record.order.status.replace('_', ' ')}",
+                description=f"Merchant order {record.order.merchant_order_ref}",
+                facts=facts,
+            )
+        if record.proposal:
+            approved = record.approval and record.approval.decision == "approved"
+            return schemas.WorkflowRevisionDecision(
+                kind="approval" if approved else "proposal",
+                title=record.proposal.approval_text,
+                description=(
+                    record.approval.audit_summary
+                    if approved and record.approval
+                    else "The user must approve these exact terms before checkout can begin."
+                ),
+                facts=[
+                    schemas.WorkflowRevisionFact(label="Product", value=record.proposal.title),
+                    schemas.WorkflowRevisionFact(
+                        label="Merchant", value=record.proposal.merchant_name
+                    ),
+                    schemas.WorkflowRevisionFact(
+                        label="Total",
+                        value=f"{record.proposal.total.amount:g} {record.proposal.total.currency}",
+                    ),
+                    schemas.WorkflowRevisionFact(
+                        label="Delivery", value=record.proposal.delivery.label
+                    ),
+                    schemas.WorkflowRevisionFact(
+                        label="Returns", value=record.proposal.returns.label
+                    ),
+                    schemas.WorkflowRevisionFact(
+                        label="Payment", value=record.proposal.payment_method_label
+                    ),
+                ],
+            )
+        if record.workflow.state in {"no_exact_match", "rejected", "cancelled", "completed"}:
+            return schemas.WorkflowRevisionDecision(
+                kind="result",
+                title=record.workflow.summary,
+                description="This revision records the workflow outcome at that point in history.",
+            )
+        return None
 
     def _history(self, record: WorkflowRecord) -> schemas.WorkflowHistory:
         if not record.current_revision_id:
