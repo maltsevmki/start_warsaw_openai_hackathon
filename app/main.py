@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import Depends, FastAPI
 from sqlalchemy.orm import Session
 
@@ -32,6 +30,6 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
     return db_item
 
 
-@app.get("/items", response_model=List[schemas.Item])
+@app.get("/items", response_model=list[schemas.Item])
 def list_items(db: Session = Depends(get_db)):
     return db.query(models.Item).order_by(models.Item.id).all()
