@@ -1,0 +1,112 @@
+{
+  "monitors": [
+    {
+      "id": "offer_monitor_happy", "merchantId": "merchant_displayhub", "merchantName": "DisplayHub",
+      "title": "Dell S2722QC 27-inch 4K USB-C Monitor", "category": "monitor", "brand": "Dell", "model": "S2722QC",
+      "price": {"amount": 929, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 929, "currency": "PLN"},
+      "stockStatus": "in_stock", "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 18:00", "meetsDeadline": true},
+      "compatibility": {"macbook": "yes", "notes": ["USB-C video", "65W laptop charging", "HDMI fallback"]},
+      "returns": {"returnable": true, "days": 30, "label": "Free returns within 30 days"}, "warranty": {"months": 36, "label": "3-year manufacturer warranty"},
+      "rating": {"value": 4.8, "count": 684}, "riskFlags": [], "demoBehavior": "normal"
+    },
+    {
+      "id": "offer_monitor_budget_miss", "merchantId": "merchant_proscreen", "merchantName": "ProScreen",
+      "title": "LG UltraFine 27UP850 27-inch 4K", "category": "monitor", "brand": "LG", "model": "27UP850",
+      "price": {"amount": 1199, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 1199, "currency": "PLN"},
+      "stockStatus": "in_stock", "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 20:00", "meetsDeadline": true},
+      "compatibility": {"macbook": "yes", "notes": ["USB-C video and 96W charging"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 24, "label": "2-year warranty"},
+      "rating": {"value": 4.7, "count": 391}, "riskFlags": ["over_budget"], "demoBehavior": "normal"
+    },
+    {
+      "id": "offer_monitor_delivery_miss", "merchantId": "merchant_pixel", "merchantName": "Pixel Market",
+      "title": "Samsung ViewFinity S7 27-inch 4K", "category": "monitor", "brand": "Samsung", "model": "S70A",
+      "price": {"amount": 849, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 849, "currency": "PLN"},
+      "stockStatus": "in_stock", "delivery": {"earliest": "this_week", "latest": "this_week", "label": "Delivery in 3-5 days", "meetsDeadline": false},
+      "compatibility": {"macbook": "yes", "notes": ["HDMI connection; adapter may be needed"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 24, "label": "2-year warranty"},
+      "rating": {"value": 4.5, "count": 248}, "riskFlags": ["delivery_miss"], "demoBehavior": "normal"
+    },
+    {
+      "id": "offer_monitor_weak_returns", "merchantId": "merchant_quicktech", "merchantName": "QuickTech",
+      "title": "Philips 278E1A 27-inch 4K", "category": "monitor", "brand": "Philips", "model": "278E1A",
+      "price": {"amount": 799, "currency": "PLN"}, "taxesAndFees": {"amount": 15, "currency": "PLN"}, "total": {"amount": 814, "currency": "PLN"},
+      "stockStatus": "low_stock", "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 21:00", "meetsDeadline": true},
+      "compatibility": {"macbook": "yes", "notes": ["HDMI connection"]},
+      "returns": {"returnable": true, "days": 14, "label": "14-day returns; buyer pays postage"}, "warranty": {"months": 24, "label": "2-year warranty"},
+      "rating": {"value": 4.4, "count": 155}, "riskFlags": ["weak_return_terms"], "demoBehavior": "normal"
+    },
+    {
+      "id": "offer_monitor_oos", "merchantId": "merchant_megabyte", "merchantName": "MegaByte",
+      "title": "AOC U27V4EA 27-inch 4K", "category": "monitor", "brand": "AOC", "model": "U27V4EA",
+      "price": {"amount": 739, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 739, "currency": "PLN"},
+      "stockStatus": "out_of_stock", "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Unavailable", "meetsDeadline": false},
+      "compatibility": {"macbook": "yes", "notes": ["HDMI connection"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 36, "label": "3-year warranty"},
+      "rating": {"value": 4.3, "count": 99}, "riskFlags": ["out_of_stock"], "demoBehavior": "normal"
+    }
+  ],
+  "headphones": [
+    {
+      "id": "offer_headphones_tomorrow", "merchantId": "merchant_audio", "merchantName": "Audio Point",
+      "title": "Soundcore Q20i Noise Cancelling Headphones", "category": "headphones", "brand": "Soundcore", "model": "Q20i",
+      "price": {"amount": 189, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 189, "currency": "PLN"},
+      "stockStatus": "in_stock", "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 18:00", "meetsDeadline": true},
+      "compatibility": {"macbook": "yes", "notes": ["Bluetooth and 3.5 mm"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 24, "label": "2-year warranty"},
+      "rating": {"value": 4.6, "count": 920}, "riskFlags": [], "demoBehavior": "normal"
+    },
+    {
+      "id": "offer_headphones_today_over", "merchantId": "merchant_same_day", "merchantName": "SameDay Electronics",
+      "title": "JBL Tune 770NC Headphones", "category": "headphones", "brand": "JBL", "model": "Tune 770NC",
+      "price": {"amount": 269, "currency": "PLN"}, "taxesAndFees": {"amount": 20, "currency": "PLN"}, "total": {"amount": 289, "currency": "PLN"},
+      "stockStatus": "in_stock", "delivery": {"earliest": "today", "latest": "today", "label": "Today by 22:00", "meetsDeadline": true},
+      "compatibility": {"macbook": "yes", "notes": ["Bluetooth multipoint"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 24, "label": "2-year warranty"},
+      "rating": {"value": 4.7, "count": 1104}, "riskFlags": ["over_budget"], "demoBehavior": "normal"
+    },
+    {
+      "id": "offer_headphones_premium", "merchantId": "merchant_hifi", "merchantName": "HiFi Corner",
+      "title": "Sony WH-CH720N Headphones", "category": "headphones", "brand": "Sony", "model": "WH-CH720N",
+      "price": {"amount": 349, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 349, "currency": "PLN"},
+      "stockStatus": "in_stock", "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 16:00", "meetsDeadline": true},
+      "compatibility": {"macbook": "yes", "notes": ["Bluetooth multipoint"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 24, "label": "2-year warranty"},
+      "rating": {"value": 4.8, "count": 2077}, "riskFlags": ["over_budget"], "demoBehavior": "normal"
+    }
+  ],
+  "shoes": [
+    {
+      "id": "offer_shoes_42", "merchantId": "merchant_walk", "merchantName": "Walk Warsaw", "title": "New Balance 574 Black - size 42", "category": "shoes", "brand": "New Balance", "model": "574",
+      "price": {"amount": 399, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 399, "currency": "PLN"}, "stockStatus": "in_stock",
+      "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 19:00", "meetsDeadline": true}, "compatibility": {"macbook": "unknown", "notes": ["Available in size 42"]},
+      "returns": {"returnable": true, "days": 30, "label": "Free 30-day returns"}, "warranty": {"months": 24, "label": "2-year statutory warranty"}, "rating": {"value": 4.8, "count": 421}, "riskFlags": [], "demoBehavior": "normal"
+    },
+    {
+      "id": "offer_shoes_42_alt", "merchantId": "merchant_runner", "merchantName": "Runner Shop", "title": "Adidas Runfalcon Black - size 42", "category": "shoes", "brand": "Adidas", "model": "Runfalcon",
+      "price": {"amount": 289, "currency": "PLN"}, "taxesAndFees": {"amount": 10, "currency": "PLN"}, "total": {"amount": 299, "currency": "PLN"}, "stockStatus": "in_stock",
+      "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 21:00", "meetsDeadline": true}, "compatibility": {"macbook": "unknown", "notes": ["Available in size 42"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 24, "label": "2-year statutory warranty"}, "rating": {"value": 4.5, "count": 285}, "riskFlags": [], "demoBehavior": "normal"
+    },
+    {
+      "id": "offer_shoes_other_size", "merchantId": "merchant_urban", "merchantName": "Urban Steps", "title": "Nike Revolution Grey - size 41", "category": "shoes", "brand": "Nike", "model": "Revolution",
+      "price": {"amount": 319, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 319, "currency": "PLN"}, "stockStatus": "in_stock",
+      "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 20:00", "meetsDeadline": true}, "compatibility": {"macbook": "unknown", "notes": ["Available in size 41"]},
+      "returns": {"returnable": true, "days": 14, "label": "14-day returns"}, "warranty": {"months": 24, "label": "2-year statutory warranty"}, "rating": {"value": 4.4, "count": 192}, "riskFlags": ["size_mismatch"], "demoBehavior": "normal"
+    }
+  ],
+  "usb_c_hubs": [
+    {
+      "id": "offer_hub_failure", "merchantId": "merchant_connect", "merchantName": "Connect Now", "title": "Baseus 6-in-1 USB-C Hub", "category": "usb_c_hub", "brand": "Baseus", "model": "6-in-1",
+      "price": {"amount": 119, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 119, "currency": "PLN"}, "stockStatus": "in_stock",
+      "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 18:00", "meetsDeadline": true}, "compatibility": {"macbook": "yes", "notes": ["USB-C, HDMI, USB-A and PD passthrough"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 24, "label": "2-year warranty"}, "rating": {"value": 4.6, "count": 510}, "riskFlags": ["demo_stock_drift"], "demoBehavior": "out_of_stock_at_checkout"
+    },
+    {
+      "id": "offer_hub_normal", "merchantId": "merchant_accessory", "merchantName": "Accessory Lab", "title": "Anker 555 8-in-1 USB-C Hub", "category": "usb_c_hub", "brand": "Anker", "model": "555",
+      "price": {"amount": 279, "currency": "PLN"}, "taxesAndFees": {"amount": 0, "currency": "PLN"}, "total": {"amount": 279, "currency": "PLN"}, "stockStatus": "in_stock",
+      "delivery": {"earliest": "tomorrow", "latest": "tomorrow", "label": "Tomorrow by 18:00", "meetsDeadline": true}, "compatibility": {"macbook": "yes", "notes": ["USB-C, dual HDMI, Ethernet and PD passthrough"]},
+      "returns": {"returnable": true, "days": 30, "label": "30-day returns"}, "warranty": {"months": 24, "label": "2-year warranty"}, "rating": {"value": 4.8, "count": 844}, "riskFlags": [], "demoBehavior": "normal"
+    }
+  ]
+}
