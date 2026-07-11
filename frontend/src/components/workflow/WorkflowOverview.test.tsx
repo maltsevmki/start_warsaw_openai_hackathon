@@ -13,9 +13,9 @@ const comparison = {
   recommendation: 'proceed',
   summary: 'Three viable offers were compared.',
   rankedOffers: [
-    { offerId: 'offer_1', rank: 1, score: 9.4, title: 'Monitor One', total: { amount: 899, currency: 'PLN' }, reasons: ['Best return terms'], tradeoffs: [], disqualifiers: [] },
-    { offerId: 'offer_2', rank: 2, score: 8.8, title: 'Monitor Two', total: { amount: 829, currency: 'PLN' }, reasons: ['Lower price'], tradeoffs: ['Shorter warranty'], disqualifiers: [] },
-    { offerId: 'offer_3', rank: 3, score: 8.1, title: 'Monitor Three', total: { amount: 949, currency: 'PLN' }, reasons: ['Fast delivery'], tradeoffs: [], disqualifiers: [] },
+    { offerId: 'offer_1', rank: 1, score: 9.4, title: 'Monitor One', merchantName: 'Store One', productUrl: 'https://store.example/one', evidenceSources: [{ url: 'https://store.example/one', title: 'Monitor One' }], total: { amount: 899, currency: 'PLN' }, reasons: ['Best return terms'], tradeoffs: [], disqualifiers: [] },
+    { offerId: 'offer_2', rank: 2, score: 8.8, title: 'Monitor Two', merchantName: 'Store Two', productUrl: 'https://store.example/two', evidenceSources: [{ url: 'https://store.example/two', title: 'Monitor Two' }], total: { amount: 829, currency: 'PLN' }, reasons: ['Lower price'], tradeoffs: ['Shorter warranty'], disqualifiers: [] },
+    { offerId: 'offer_3', rank: 3, score: 8.1, title: 'Monitor Three', merchantName: 'Store Three', productUrl: 'https://store.example/three', evidenceSources: [{ url: 'https://store.example/three', title: 'Monitor Three' }], total: { amount: 949, currency: 'PLN' }, reasons: ['Fast delivery'], tradeoffs: [], disqualifiers: [] },
   ],
   missingEvidence: [],
 } satisfies ComparisonResult
@@ -25,6 +25,7 @@ describe('ComparisonSection', () => {
     render(<ComparisonSection comparison={comparison} selectedOfferId="offer_1" canSelect onSelect={vi.fn()} />)
     expect(screen.queryByText(/score/i)).toBeNull()
     expect(screen.getByText('Your choice')).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: /verified merchant page/i })).toHaveLength(3)
     expect(screen.getAllByRole('article')).toHaveLength(3)
   })
 

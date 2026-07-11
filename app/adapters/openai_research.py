@@ -1,19 +1,25 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
+from urllib.parse import urlsplit, urlunsplit
 
 from openai import OpenAI
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app import schemas
 from app.domain.catalog import CatalogSearchResult
 
 if TYPE_CHECKING:
-    from app.modules import MockCatalogModule
+    from app.modules import ProductCatalogModule
 
 
 class OfferDraft(schemas.Offer):
     """Structured web-research result before it becomes a catalog offer."""
+
+    product_url: str = Field(alias="productUrl")
+    evidence_sources: list[schemas.EvidenceSource] = Field(
+        alias="evidenceSources", min_length=1, max_length=5
+    )
 
 
 class OfferList(BaseModel):
@@ -21,27 +27,32 @@ class OfferList(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    offers: list[OfferDraft]
+    offers: list[OfferDraft] = Field(max_length=8)
 
 
 RESEARCH_SYSTEM_PROMPT = """
 You research purchasable products for a trustworthy Polish agent-commerce workflow.
-Use web search to find current offers, then return only the requested structured data.
+Use live web search to find current, real offers from merchants that sell in Poland, then return
+only the requested structured data. Search before answering. Prefer direct merchant product pages
+over category pages, snippets, reviews, or marketplaces with unclear sellers.
 
 The requested product category is authoritative: every offer.category must exactly equal it.
 Return no offers if you cannot substantiate a purchasable offer that is relevant to the request.
 All prices are PLN and every money object must be {"amount": number, "currency": "PLN"}.
 Set total.amount exactly to price.amount + taxesAndFees.amount.
 
-Use stable, unique ids prefixed with "web_". Include merchantId, merchantName, title, brand, and
-model when known. stockStatus must be exactly in_stock, low_stock, or out_of_stock.
+Return at most eight offers. Use stable, unique ids prefixed with "web_". Include merchantId,
+merchantName, title, brand, model when known, and productUrl pointing to the exact purchasable
+merchant page. Return only in_stock or low_stock products; never return an unavailable listing.
+Every offer must include evidenceSources with the exact product-page URL and title used to verify
+its price and availability. Only cite pages actually opened by web search during this response.
 delivery.earliest must be exactly today, tomorrow, or this_week; delivery.latest must use the
 same vocabulary; delivery.label should explain the estimate. compatibility.macbook must be yes,
 no, or unknown. Set delivery.meetsDeadline truthfully for the requested deadline.
 
 Each offer needs returns {returnable, days, label}, warranty {months, label}, and rating
 {value from 0 to 5, count}. If a detail is unknown, use conservative sane defaults and record
-what is unknown in riskFlags rather than inventing evidence. Use demoBehavior "normal" or omit it.
+what is unknown in riskFlags rather than inventing evidence. Omit demoBehavior; it is test-only.
 Do not claim checkout is complete, and do not return citations or prose outside the schema.
 """.strip()
 
@@ -55,12 +66,12 @@ class OpenAIResearchAgent:
         model: str = "gpt-5.4-mini",
         timeout_seconds: float = 90,
         client: OpenAI | None = None,
-        deterministic: MockCatalogModule | None = None,
+        deterministic: ProductCatalogModule | None = None,
     ):
         if not api_key and client is None:
             raise ValueError("OPENAI_API_KEY is required when CATALOG_PROVIDER=openai")
         if deterministic is None:
-            raise ValueError("A deterministic catalog fallback is required")
+            raise ValueError("A catalog evaluator and offer cache are required")
         self.model = model
         # A web-search response can take longer than a plain model call. One
         # bounded attempt is clearer and faster than retrying an agentic search.
@@ -73,7 +84,22 @@ class OpenAIResearchAgent:
         try:
             response = self.client.responses.parse(
                 model=self.model,
-                tools=[{"type": "web_search"}],
+                tools=[
+                    {
+                        "type": "web_search",
+                        "search_context_size": "medium",
+                        "external_web_access": True,
+                        "user_location": {
+                            "type": "approximate",
+                            "country": "PL",
+                            "city": "Warsaw",
+                            "region": "Mazowieckie",
+                            "timezone": "Europe/Warsaw",
+                        },
+                    }
+                ],
+                tool_choice="required",
+                include=["web_search_call.action.sources"],
                 instructions=RESEARCH_SYSTEM_PROMPT,
                 input=self._input_for(constraints, profile),
                 text_format=OfferList,
@@ -86,15 +112,16 @@ class OpenAIResearchAgent:
                     constraints,
                     [],
                     cache=True,
-                    include_fixture_alternatives=False,
                 )
             offers = [schemas.Offer.model_validate(offer.model_dump(by_alias=True)) for offer in output.offers]
-            self._validate_offers(offers, constraints)
+            sources = self._extract_sources(response)
+            offers = self._validated_offers(offers, constraints, sources)
+            for offer in offers:
+                offer.demo_behavior = None
             return self.deterministic.evaluate_offers(
                 constraints,
                 offers,
                 cache=True,
-                include_fixture_alternatives=False,
             )
         except Exception as exc:
             _raise_research_unavailable(
@@ -118,13 +145,41 @@ class OpenAIResearchAgent:
         )
 
     @staticmethod
-    def _validate_offers(
-        offers: list[schemas.Offer], constraints: schemas.ShoppingConstraints) -> None:
+    def _validated_offers(
+        offers: list[schemas.Offer],
+        constraints: schemas.ShoppingConstraints,
+        consulted_sources: dict[str, schemas.EvidenceSource],
+    ) -> list[schemas.Offer]:
+        if not consulted_sources:
+            raise ValueError("OpenAI research returned no verifiable web sources")
         if len({offer.id for offer in offers}) != len(offers):
             raise ValueError("OpenAI research returned duplicate offer ids")
+        validated: list[schemas.Offer] = []
         for offer in offers:
+            try:
+                OpenAIResearchAgent._validate_offer(offer, constraints, consulted_sources)
+            except ValueError:
+                # Keep valid, verifiable offers rather than failing a whole search because
+                # one model candidate was not grounded in the tool response.
+                continue
+            validated.append(offer)
+        if not validated:
+            raise ValueError("OpenAI research returned no offers grounded in consulted sources")
+        return validated
+
+    @staticmethod
+    def _validate_offer(
+        offer: schemas.Offer,
+        constraints: schemas.ShoppingConstraints,
+        consulted_sources: dict[str, schemas.EvidenceSource],
+    ) -> None:
+        try:
+            if not offer.id.startswith("web_"):
+                raise ValueError("OpenAI research returned an invalid offer id")
             if offer.category != constraints.product_category:
                 raise ValueError("OpenAI research returned an offer from the wrong category")
+            if offer.stock_status == "out_of_stock":
+                raise ValueError("OpenAI research returned an unavailable offer")
             if offer.delivery.earliest not in {"today", "tomorrow", "this_week"}:
                 raise ValueError("OpenAI research returned an invalid delivery estimate")
             if offer.delivery.latest not in {"today", "tomorrow", "this_week"}:
@@ -135,6 +190,33 @@ class OpenAIResearchAgent:
                 raise ValueError("OpenAI research returned an invalid rating")
             if offer.returns.days < 0 or offer.warranty.months < 0:
                 raise ValueError("OpenAI research returned invalid terms")
+            product_url = _normalized_url(offer.product_url)
+            evidence_urls = {_normalized_url(source.url) for source in offer.evidence_sources}
+            if not product_url or product_url not in evidence_urls:
+                raise ValueError("OpenAI research returned an ungrounded product URL")
+            if any(url not in consulted_sources for url in evidence_urls):
+                raise ValueError("OpenAI research cited a source it did not consult")
+        except (AttributeError, TypeError):
+            raise ValueError("OpenAI research returned an invalid offer") from None
+
+    @staticmethod
+    def _extract_sources(response: Any) -> dict[str, schemas.EvidenceSource]:
+        sources: dict[str, schemas.EvidenceSource] = {}
+        for item in getattr(response, "output", []) or []:
+            item_data = _mapping(item)
+            if item_data.get("type") != "web_search_call":
+                continue
+            action = _mapping(item_data.get("action"))
+            for raw_source in action.get("sources", []) or []:
+                source = _mapping(raw_source)
+                url = source.get("url")
+                normalized = _normalized_url(url)
+                if not normalized:
+                    continue
+                sources[normalized] = schemas.EvidenceSource(
+                    url=str(url), title=str(source.get("title") or url)
+                )
+        return sources
 
 
 class UnavailableCatalogResearch:
@@ -158,3 +240,20 @@ def _raise_research_unavailable(message: str, cause: Exception | None = None) ->
     if cause:
         raise error from cause
     raise error
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    keys = ("type", "action", "sources", "url", "title")
+    return {key: getattr(value, key) for key in keys if hasattr(value, key)}
+
+
+def _normalized_url(value: str | None) -> str:
+    if not value:
+        return ""
+    parsed = urlsplit(str(value).strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    path = parsed.path.rstrip("/") or "/"
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, "", ""))

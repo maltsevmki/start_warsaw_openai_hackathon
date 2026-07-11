@@ -11,7 +11,7 @@ from app.modules import (
     DemoProfileModule,
     DomainError,
     IntentGuardrailModule,
-    MockCatalogModule,
+    ProductCatalogModule,
     MockCheckoutModule,
     MockTrackingModule,
     ProposalModule,
@@ -80,12 +80,12 @@ class WorkflowOrchestrator:
         "cancelled": [],
     }
 
-    def __init__(self, intent=None, settings: Settings | None = None):
+    def __init__(self, intent=None, settings: Settings | None = None, catalog: ProductCatalogModule | None = None):
         self.profile = DemoProfileModule()
         self.intent = intent or (
             build_intent_module(settings) if settings is not None else IntentGuardrailModule()
         )
-        self.catalog = MockCatalogModule(settings=settings)
+        self.catalog = catalog or ProductCatalogModule(settings=settings)
         self.comparison = ComparisonModule(settings=settings)
         self.proposals = ProposalModule()
         self.consent = ConsentAuditModule()
@@ -307,7 +307,12 @@ class WorkflowOrchestrator:
             raise DomainError("The offer cannot be changed after approval", 409)
         if not record.comparison or not record.proposal:
             raise DomainError("Workflow has no comparison or current proposal")
-        top_offer_ids = [item.offer_id for item in record.comparison.ranked_offers[:3]]
+        selectable = [
+            item
+            for item in record.comparison.ranked_offers[:3]
+            if not item.disqualifiers and item.score >= 50
+        ]
+        top_offer_ids = [item.offer_id for item in selectable]
         if offer_id not in top_offer_ids:
             raise DomainError("Offer must belong to the current top three", 422)
         if record.proposal.offer_id == offer_id:
@@ -596,7 +601,18 @@ class WorkflowOrchestrator:
             "module",
             "catalog",
             f"Catalog search returned {len(search.offers)} candidate offers ({search.status}).",
-            {"searchId": search.search_id, "status": search.status, "offerCount": len(search.offers)},
+            {
+                "searchId": search.search_id,
+                "status": search.status,
+                "offerCount": len(search.offers),
+                "sourceCount": len(
+                    {
+                        source.url
+                        for offer in search.offers
+                        for source in offer.evidence_sources
+                    }
+                ),
+            },
         )
         if search.status == "alternatives_found":
             record.alternatives = search.alternatives

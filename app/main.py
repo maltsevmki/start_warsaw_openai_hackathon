@@ -13,9 +13,9 @@ from app.settings import Settings
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Agent Commerce Mock API",
-    version="0.2.0",
-    description="A complete, deterministic mock of the agent-commerce workflow for the Warsaw OpenAI hackathon demo.",
+    title="Agent Commerce API",
+    version="0.3.0",
+    description="A trustworthy agent-commerce workflow with live OpenAI product research.",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -37,7 +37,7 @@ async def domain_error_handler(request: Request, exc: DomainError):
 def root():
     return {
         "status": "ok",
-        "service": "agent-commerce-mock-api",
+        "service": "agent-commerce-api",
         "docs": "/docs",
         "health": "/health",
         "scenarios": "/api/demo/scenarios",
@@ -48,8 +48,13 @@ def root():
 def health():
     return {
         "status": "healthy",
-        "mode": "hybrid_capable",
+        "mode": "live_research" if orchestrator.catalog._research_agent else "unconfigured",
         "intentProvider": type(orchestrator.intent).__name__,
+        "catalogProvider": (
+            type(orchestrator.catalog._research_agent).__name__
+            if orchestrator.catalog._research_agent
+            else "unconfigured"
+        ),
         "catalogOffers": len(orchestrator.catalog.offers),
     }
 

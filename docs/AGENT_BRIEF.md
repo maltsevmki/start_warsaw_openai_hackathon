@@ -47,16 +47,16 @@ app/
   modules.py         8 capability classes (the swap points):
                        DemoProfileModule   - hardcoded demo user (Warsaw, MacBook, demo card)
                        IntentGuardrailModule - MOCK classify/clarify/guardrail (regex+keywords)
-                       MockCatalogModule   - MOCK research over fixtures/catalog.json (13 offers)
+                       ProductCatalogModule - OpenAI web research and in-memory offer cache
                        ComparisonModule    - REAL deterministic scoring/ranking
                        ProposalModule      - REAL proposal build + sha256 hash of exact terms
                        ConsentAuditModule  - REAL approve/reject bound to id+version+hash
                        MockCheckoutModule  - MOCK payment + revalidation (fakes out-of-stock etc.)
                        MockTrackingModule  - MOCK order status simulation
   schemas.py         All request/response pydantic models (THE data contract). camelCase aliases.
-  fixtures/catalog.json  13 mock offers (monitors, headphones, shoes, usb_c hubs)
   database.py, models.py  SQLite/SQLAlchemy (starter Item only)
 tests/
+  fakes.py               test-only deterministic offer records
   test_contracts.py  module-level behavior
   test_api.py        HTTP endpoint behavior for the 5 demo scenarios
 docs/AGENT_BRIEF.md  this file

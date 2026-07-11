@@ -5,7 +5,6 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -297,25 +296,15 @@ class RevalidateResult:
     reason: str | None = None
 
 
-class MockCatalogModule:
+class ProductCatalogModule:
     def __init__(
         self,
-        fixture_path: Path | None = None,
         settings: Settings | None = None,
         research_agent: CatalogModule | None = None,
     ):
         self.offers: list[schemas.Offer] = []
         self.by_id: dict[str, schemas.Offer] = {}
         self._research_agent = research_agent
-        # The fixture catalog is an explicit mock-provider dependency only.
-        # Live research caches its own offers for checkout revalidation.
-        if settings is None or settings.catalog_provider == "mock":
-            path = fixture_path or Path(__file__).parent / "fixtures" / "catalog.json"
-            raw = json.loads(path.read_text())
-            self.offers = [
-                schemas.Offer.model_validate(item) for group in raw.values() for item in group
-            ]
-            self.by_id = {offer.id: offer for offer in self.offers}
         if self._research_agent is None and settings is not None:
             self._research_agent = self._build_research_agent(settings)
 
@@ -324,17 +313,7 @@ class MockCatalogModule:
     ) -> CatalogSearchResult:
         if self._research_agent:
             return self._research_agent.search(constraints, profile)
-        return self.search_fixtures(constraints, profile)
-
-    def search_fixtures(
-        self, constraints: schemas.ShoppingConstraints, profile: schemas.DemoUserProfile
-    ) -> CatalogSearchResult:
-        candidates = [
-            self._for_deadline(offer, constraints.delivery_deadline)
-            for offer in self.offers
-            if offer.category == constraints.product_category
-        ]
-        return self.evaluate_offers(constraints, candidates)
+        raise DomainError("Live product research is not configured. Set OPENAI_API_KEY and try again.", 503)
 
     def evaluate_offers(
         self,
@@ -342,7 +321,7 @@ class MockCatalogModule:
         offers: list[schemas.Offer],
         *,
         cache: bool = False,
-        include_fixture_alternatives: bool = True,
+        include_alternatives: bool = True,
     ) -> CatalogSearchResult:
         candidates = [self._for_deadline(offer, constraints.delivery_deadline) for offer in offers]
         if cache:
@@ -350,7 +329,7 @@ class MockCatalogModule:
         exact = [offer for offer in candidates if self._is_exact(offer, constraints)]
         if exact:
             return CatalogSearchResult(new_id("search"), "offers_found", candidates, [])
-        alternatives = self._alternatives(constraints, candidates) if include_fixture_alternatives else []
+        alternatives = self._alternatives(constraints, candidates) if include_alternatives else []
         return CatalogSearchResult(
             new_id("search"),
             "alternatives_found" if alternatives else "no_results",
@@ -421,27 +400,53 @@ class MockCatalogModule:
         self, constraints: schemas.ShoppingConstraints, offers: list[schemas.Offer]
     ) -> list[schemas.Alternative]:
         alternatives: list[schemas.Alternative] = []
-        if constraints.product_category == "headphones" and constraints.delivery_deadline == "today":
+        if constraints.delivery_deadline == "today":
             later = constraints.model_copy(deep=True)
             later.delivery_deadline = "tomorrow"
-            alternatives.append(
-                schemas.Alternative(
-                    id="alt_delivery_tomorrow",
-                    reason="later_delivery",
-                    message="No exact option meets both 200 PLN and today. The Soundcore Q20i is 189 PLN and arrives tomorrow.",
-                    adjustedConstraints=later,
-                )
+            later_match = next(
+                (
+                    offer
+                    for offer in offers
+                    if self._is_exact(self._for_deadline(offer, "tomorrow"), later)
+                ),
+                None,
             )
-            higher = constraints.model_copy(deep=True)
-            higher.budget_max = schemas.Money(amount=300)
-            alternatives.append(
-                schemas.Alternative(
-                    id="alt_budget_300",
-                    reason="higher_budget",
-                    message="Raise the budget to 300 PLN for the JBL Tune 770NC with delivery today.",
-                    adjustedConstraints=higher,
+            if later_match:
+                alternatives.append(
+                    schemas.Alternative(
+                        id="alt_delivery_tomorrow",
+                        reason="later_delivery",
+                        message=(
+                            f"No exact option meets today's deadline. {later_match.title} "
+                            "is the closest verified match and arrives tomorrow."
+                        ),
+                        adjustedConstraints=later,
+                    )
                 )
-            )
+
+        if constraints.budget_max:
+            otherwise_matching: list[schemas.Offer] = []
+            for offer in offers:
+                relaxed = constraints.model_copy(deep=True)
+                relaxed.budget_max = None
+                if self._is_exact(offer, relaxed) and offer.total.amount > constraints.budget_max.amount:
+                    otherwise_matching.append(offer)
+            if otherwise_matching:
+                closest = min(otherwise_matching, key=lambda offer: offer.total.amount)
+                rounded_budget = int((closest.total.amount + 49) // 50 * 50)
+                higher = constraints.model_copy(deep=True)
+                higher.budget_max = schemas.Money(amount=rounded_budget)
+                alternatives.append(
+                    schemas.Alternative(
+                        id=f"alt_budget_{rounded_budget}",
+                        reason="higher_budget",
+                        message=(
+                            f"Raise the budget to {rounded_budget} PLN for the closest verified "
+                            f"match, {closest.title}."
+                        ),
+                        adjustedConstraints=higher,
+                    )
+                )
         return alternatives
 
 
@@ -469,6 +474,9 @@ class ComparisonModule:
     ) -> schemas.ComparisonResult:
         lowest = min((o.total.amount for o in offers if o.stock_status != "out_of_stock"), default=0)
         ranked: list[schemas.RankedOffer] = []
+        required_size = next(
+            (item for item in constraints.must_have if item.startswith("size ")), None
+        )
         for offer in offers:
             score = 0.0
             reasons: list[str] = []
@@ -477,8 +485,20 @@ class ComparisonModule:
 
             if offer.stock_status == "out_of_stock":
                 disqualifiers.append("Out of stock")
-            if constraints.compatibility and offer.compatibility.macbook == "no":
-                disqualifiers.append("Incompatible with MacBook")
+            if constraints.delivery_deadline and not offer.delivery.meets_deadline:
+                disqualifiers.append("Misses the required delivery deadline")
+            if constraints.budget_max and offer.total.amount > constraints.budget_max.amount:
+                disqualifiers.append("Exceeds the maximum budget")
+            if constraints.compatibility and offer.compatibility.macbook != "yes":
+                disqualifiers.append(
+                    "Incompatible with MacBook"
+                    if offer.compatibility.macbook == "no"
+                    else "MacBook compatibility is unverified"
+                )
+            if constraints.required_return_days and offer.returns.days < constraints.required_return_days:
+                disqualifiers.append("Return window is shorter than required")
+            if required_size and required_size not in offer.title.lower():
+                disqualifiers.append(f"Does not match required {required_size}")
 
             if "cheapest" in constraints.must_have:
                 budget_score = 30 if offer.total.amount == lowest else max(0, 30 - (offer.total.amount - lowest) / 8)
@@ -519,10 +539,14 @@ class ComparisonModule:
                     rank=0,
                     score=round(score, 1),
                     title=offer.title,
+                    merchantName=offer.merchant_name,
+                    productUrl=offer.product_url,
+                    evidenceSources=offer.evidence_sources,
                     total=offer.total,
                     reasons=reasons,
                     tradeoffs=tradeoffs,
                     disqualifiers=disqualifiers,
+                    riskFlags=offer.risk_flags,
                 )
             )
 
@@ -552,7 +576,9 @@ class ComparisonModule:
             recommendation=recommendation,
             summary=summary,
             rankedOffers=ranked,
-            missingEvidence=[] if best else ["No offer satisfies all hard requirements"],
+            missingEvidence=(
+                best.risk_flags if best else ["No offer satisfies all hard requirements"]
+            ),
         )
 
     @staticmethod
@@ -591,6 +617,10 @@ class ProposalModule:
             "offerId": offer.id,
             "merchantName": offer.merchant_name,
             "title": offer.title,
+            "productUrl": offer.product_url,
+            "evidenceSources": [
+                source.model_dump(by_alias=True) for source in offer.evidence_sources
+            ],
             "quantity": 1,
             "lineItems": [
                 {"label": "Item", "amount": offer.price.model_dump(by_alias=True)},
@@ -677,7 +707,7 @@ class CheckoutResult:
 
 
 class MockCheckoutModule:
-    def __init__(self, catalog: MockCatalogModule, gateway: "PaymentGateway | None" = None):
+    def __init__(self, catalog: ProductCatalogModule, gateway: "PaymentGateway | None" = None):
         self.catalog = catalog
         if gateway is None:
             from app.payments import default_gateway

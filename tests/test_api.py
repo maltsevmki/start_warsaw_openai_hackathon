@@ -2,7 +2,8 @@ from fastapi.testclient import TestClient
 
 from app.adapters.openai_research import OpenAIResearchAgent
 from app.main import app, orchestrator
-from app.modules import MockCatalogModule, MockCheckoutModule
+from app.modules import MockCheckoutModule, ProductCatalogModule
+from tests.fakes import TestCatalog
 
 
 client = TestClient(app)
@@ -10,6 +11,9 @@ HAPPY_PROMPT = "Find me the best monitor under 1000 PLN that works with my MacBo
 
 
 def setup_function():
+    catalog = TestCatalog()
+    orchestrator.catalog = catalog
+    orchestrator.checkout = MockCheckoutModule(catalog)
     orchestrator.reset()
 
 
@@ -158,7 +162,7 @@ def test_live_research_failure_is_reported_as_a_service_error(monkeypatch):
     class FailingClient:
         responses = FailingResponses()
 
-    catalog = MockCatalogModule()
+    catalog = ProductCatalogModule()
     catalog._research_agent = OpenAIResearchAgent(
         api_key="", client=FailingClient(), deterministic=catalog
     )
@@ -174,7 +178,13 @@ def test_live_research_failure_is_reported_as_a_service_error(monkeypatch):
 
 
 def test_user_can_select_another_top_offer_before_approval():
-    view = client.post("/api/workflows", json={"prompt": HAPPY_PROMPT}).json()
+    clarification = client.post(
+        "/api/workflows", json={"prompt": "Buy me shoes for tomorrow."}
+    ).json()
+    view = client.post(
+        f"/api/workflows/{clarification['workflow']['id']}/messages",
+        json={"message": "Size 42, black, comfortable for walking."},
+    ).json()
     workflow_id = view["workflow"]["id"]
     current_offer_id = view["proposal"]["offerId"]
     alternate = next(
@@ -203,6 +213,15 @@ def test_offer_cannot_be_changed_after_approval_or_outside_top_three():
         json={"offerId": "offer_not_in_comparison"},
     )
     assert invalid.status_code == 422
+
+    disqualified = next(
+        offer for offer in view["comparison"]["rankedOffers"] if offer["disqualifiers"]
+    )
+    hard_constraint_failure = client.post(
+        f"/api/workflows/{workflow_id}/select-offer",
+        json={"offerId": disqualified["offerId"]},
+    )
+    assert hard_constraint_failure.status_code == 422
 
     proposal = view["proposal"]
     approved = client.post(

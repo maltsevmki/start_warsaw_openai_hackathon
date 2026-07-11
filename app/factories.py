@@ -31,10 +31,8 @@ def build_intent_module(settings: Settings | None = None) -> IntentModule:
 def build_catalog_research_module(
     settings: Settings, deterministic: CatalogModule
 ) -> CatalogModule | None:
-    """Select live research without allowing fixture fallback in live mode."""
+    """Build the sole production product-research provider."""
 
-    if settings.catalog_provider == "mock":
-        return None
     if settings.catalog_provider == "openai":
         if not settings.openai_api_key:
             return UnavailableCatalogResearch(
@@ -47,7 +45,7 @@ def build_catalog_research_module(
             deterministic=deterministic,
         )
     raise RuntimeError(
-        f"Unknown CATALOG_PROVIDER '{settings.catalog_provider}'. Expected 'mock' or 'openai'."
+        f"Unknown CATALOG_PROVIDER '{settings.catalog_provider}'. Expected 'openai'."
     )
 
 

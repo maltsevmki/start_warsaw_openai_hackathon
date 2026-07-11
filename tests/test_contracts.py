@@ -9,12 +9,12 @@ from app.modules import (
     DemoProfileModule,
     DomainError,
     IntentGuardrailModule,
-    MockCatalogModule,
     MockCheckoutModule,
     MockTrackingModule,
     ProposalModule,
 )
 from app.orchestrator import WorkflowOrchestrator
+from tests.fakes import TestCatalog
 
 
 HAPPY_PROMPT = "Find me the best monitor under 1000 PLN that works with my MacBook, arrives tomorrow, and has good return terms. Buy it if you are confident."
@@ -65,7 +65,7 @@ def test_shoe_clarification_exposes_renderable_form(profile):
 
 def test_catalog_and_comparison_choose_happy_monitor(profile):
     classification = IntentGuardrailModule().classify(HAPPY_PROMPT, [], profile)
-    search = MockCatalogModule().search(classification.constraints, profile)
+    search = TestCatalog().search(classification.constraints, profile)
     assert search.status == "offers_found"
     assert len(search.offers) >= 4
     comparison = ComparisonModule().compare("wf_test", classification.constraints, profile, search.offers)
@@ -75,13 +75,13 @@ def test_catalog_and_comparison_choose_happy_monitor(profile):
 
 def test_catalog_offers_transparent_headphone_alternatives(profile):
     constraints = IntentGuardrailModule().classify(ALTERNATIVE_PROMPT, [], profile).constraints
-    result = MockCatalogModule().search(constraints, profile)
+    result = TestCatalog().search(constraints, profile)
     assert result.status == "alternatives_found"
     assert {item.id for item in result.alternatives} == {"alt_delivery_tomorrow", "alt_budget_300"}
 
 
 def test_proposal_hash_changes_with_approved_total(profile):
-    catalog = MockCatalogModule()
+    catalog = TestCatalog()
     offer = catalog.get_offer("offer_monitor_happy")
     comparison = schemas.ComparisonResult(
         id="cmp", bestOfferId=offer.id, confidence=0.99, recommendation="proceed",
@@ -95,7 +95,7 @@ def test_proposal_hash_changes_with_approved_total(profile):
 
 
 def test_consent_rejects_wrong_hash(profile):
-    orchestrator = WorkflowOrchestrator()
+    orchestrator = WorkflowOrchestrator(catalog=TestCatalog())
     view = orchestrator.start_workflow(HAPPY_PROMPT)
     with pytest.raises(DomainError, match="hash"):
         ConsentAuditModule().approve(
@@ -104,7 +104,7 @@ def test_consent_rejects_wrong_hash(profile):
 
 
 def test_checkout_refuses_without_approval(profile):
-    orchestrator = WorkflowOrchestrator()
+    orchestrator = WorkflowOrchestrator(catalog=TestCatalog())
     view = orchestrator.start_workflow(HAPPY_PROMPT)
     result = MockCheckoutModule(orchestrator.catalog).execute(
         view.workflow.id, view.proposal, None, profile.payment_method.token
@@ -113,8 +113,8 @@ def test_checkout_refuses_without_approval(profile):
     assert result.attempt.failure_reason == "missing_approval"
 
 
-def test_checkout_fails_on_fixture_stock_drift():
-    orchestrator = WorkflowOrchestrator()
+def test_checkout_fails_on_inventory_stock_drift():
+    orchestrator = WorkflowOrchestrator(catalog=TestCatalog())
     view = orchestrator.start_workflow(FAILURE_PROMPT)
     approved = orchestrator.approve_proposal(
         view.workflow.id, view.proposal.id, view.proposal.version, view.proposal.hash
@@ -125,7 +125,7 @@ def test_checkout_fails_on_fixture_stock_drift():
 
 
 def test_tracking_moves_order_to_delivered():
-    orchestrator = WorkflowOrchestrator()
+    orchestrator = WorkflowOrchestrator(catalog=TestCatalog())
     view = orchestrator.start_workflow(HAPPY_PROMPT)
     approved = orchestrator.approve_proposal(
         view.workflow.id, view.proposal.id, view.proposal.version, view.proposal.hash
@@ -137,7 +137,7 @@ def test_tracking_moves_order_to_delivered():
 
 
 def test_orchestrator_happy_path_stops_for_human_approval():
-    view = WorkflowOrchestrator().start_workflow(HAPPY_PROMPT)
+    view = WorkflowOrchestrator(catalog=TestCatalog()).start_workflow(HAPPY_PROMPT)
     assert view.workflow.state == "awaiting_approval"
     assert view.proposal.offer_id == "offer_monitor_happy"
     assert "approve_proposal" in view.workflow.available_actions
@@ -149,7 +149,7 @@ def test_orchestrator_happy_path_stops_for_human_approval():
 
 
 def test_rollback_restores_snapshot_and_preserves_abandoned_branch():
-    orchestrator = WorkflowOrchestrator()
+    orchestrator = WorkflowOrchestrator(catalog=TestCatalog())
     initial = orchestrator.start_workflow(CLARIFICATION_PROMPT)
     initial_revision_id = initial.history.current_revision_id
     assert initial.history.revisions[0].decision.kind == "clarification"
@@ -184,7 +184,7 @@ def test_rollback_restores_snapshot_and_preserves_abandoned_branch():
 
 
 def test_rollback_after_checkout_records_mock_compensation():
-    orchestrator = WorkflowOrchestrator()
+    orchestrator = WorkflowOrchestrator(catalog=TestCatalog())
     proposed = orchestrator.start_workflow(HAPPY_PROMPT)
     proposal_revision_id = proposed.history.current_revision_id
     approved = orchestrator.approve_proposal(

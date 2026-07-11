@@ -419,6 +419,10 @@ export interface components {
             merchantName: string;
             /** Title */
             title: string;
+            /** Producturl */
+            productUrl?: string | null;
+            /** Evidencesources */
+            evidenceSources?: components["schemas"]["EvidenceSource"][];
             /**
              * Quantity
              * @default 1
@@ -551,6 +555,13 @@ export interface components {
             /** Events */
             events: components["schemas"]["DomainEvent"][];
         };
+        /** EvidenceSource */
+        EvidenceSource: {
+            /** Url */
+            url: string;
+            /** Title */
+            title: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -663,6 +674,12 @@ export interface components {
             score: number;
             /** Title */
             title: string;
+            /** Merchantname */
+            merchantName: string;
+            /** Producturl */
+            productUrl?: string | null;
+            /** Evidencesources */
+            evidenceSources?: components["schemas"]["EvidenceSource"][];
             total: components["schemas"]["Money"];
             /** Reasons */
             reasons: string[];
@@ -670,6 +687,8 @@ export interface components {
             tradeoffs: string[];
             /** Disqualifiers */
             disqualifiers: string[];
+            /** Riskflags */
+            riskFlags?: string[];
         };
         /** Receipt */
         Receipt: {

@@ -322,6 +322,10 @@ a { color: inherit; }
 .offer-action button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 86px; min-height: 34px; border: 1px solid var(--line-strong); border-radius: 9px; padding: 7px 10px; color: var(--ink); background: var(--paper); font-size: 10px; font-weight: 800; cursor: pointer; }
 .offer-action button:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
 .offer-action button:disabled { color: var(--green); border-color: transparent; background: var(--green-pale); cursor: default; }
+.offer-merchant { margin: 3px 0 8px; color: var(--ink-soft); font-size: 11px; font-weight: 700; }
+.source-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 9px; color: var(--green); font-size: 11px; font-weight: 800; text-decoration: none; }
+.source-link:hover { text-decoration: underline; }
+.proposal-source { margin: -8px 24px 18px; }
 
 .audit-card { position: sticky; top: 88px; max-height: calc(100vh - 108px); overflow: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--green) 42%, var(--line-strong)) transparent; border-radius: 18px; padding: 22px; }
 .audit-card::-webkit-scrollbar { width: 10px; }
