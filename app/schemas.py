@@ -410,6 +410,10 @@ class WorkflowView(APIModel):
     history: WorkflowHistory
 
 
+class WorkflowListResponse(APIModel):
+    workflows: list[WorkflowSummary]
+
+
 class StartWorkflowRequest(APIModel):
     prompt: str = Field(min_length=1, max_length=2000)
 

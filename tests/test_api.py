@@ -79,6 +79,23 @@ def test_all_happy_path_http_endpoints():
     assert delivered.json()["workflow"]["state"] == "completed"
 
 
+def test_workflow_history_lists_newest_updated_first_and_resets():
+    first = client.post("/api/workflows", json={"prompt": "Buy me shoes for tomorrow."}).json()
+    second = client.post("/api/workflows", json={"prompt": HAPPY_PROMPT}).json()
+
+    listed = client.get("/api/workflows")
+    assert listed.status_code == 200
+    workflows = listed.json()["workflows"]
+    assert [workflow["id"] for workflow in workflows] == [
+        second["workflow"]["id"],
+        first["workflow"]["id"],
+    ]
+    assert workflows[0]["prompt"] == HAPPY_PROMPT
+
+    assert client.post("/api/demo/reset").status_code == 204
+    assert client.get("/api/workflows").json() == {"workflows": []}
+
+
 def test_clarification_and_alternative_http_endpoints():
     clarification = client.post("/api/workflows", json={"prompt": "Buy me shoes for tomorrow."}).json()
     assert [field["name"] for field in clarification["clarification"]["fields"]] == [

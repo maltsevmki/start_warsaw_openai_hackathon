@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '../../api/client'
 import { workflowKeys } from '../../api/query-keys'
 import type { ClarificationReply, OrderStatus, WorkflowView } from '../../api/types'
@@ -18,6 +18,7 @@ import { DecisionPanel } from '../../components/workflow/DecisionPanel'
 import { WorkflowHistoryGraph } from '../../components/workflow/WorkflowHistoryGraph'
 import Toast, { type ToastMessage } from '../../components/Toast'
 import { autoModeCheckoutUrl, isAutoModeEnabled } from '../auto-mode'
+import { openExternalInNewTab } from '../external-navigation'
 import {
   ComparisonSection,
   PurchaseControlPanel,
@@ -52,6 +53,7 @@ export function WorkflowDetailPage({
   const queryClient = useQueryClient()
   const [announcement, setAnnouncement] = useState('')
   const [toast, setToast] = useState<ToastMessage | null>(null)
+  const openedCheckoutUrl = useRef<string | null>(null)
   const dismissToast = useCallback(() => setToast(null), [])
   const query = useQuery({
     queryKey: workflowKeys.detail(workflowId),
@@ -63,11 +65,15 @@ export function WorkflowDetailPage({
     onSuccess: (view, operation) => {
       queryClient.setQueryData(workflowKeys.detail(workflowId), view)
       queryClient.setQueryData(workflowKeys.events(workflowId), view.events)
+      queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
       setAnnouncement(view.workflow.summary)
       setToast(successMessage(operation.name, view))
       if (isAutoModeEnabled() || operation.redirectAfterApproval) {
         const checkoutUrl = autoModeCheckoutUrl(view)
-        if (checkoutUrl && typeof window !== 'undefined') window.location.assign(checkoutUrl)
+        if (checkoutUrl && typeof window !== 'undefined') {
+          openExternalInNewTab(checkoutUrl)
+          openedCheckoutUrl.current = checkoutUrl
+        }
       }
     },
     onError: (error) => setToast({ id: Date.now(), text: error.message, tone: 'error' }),
@@ -76,7 +82,10 @@ export function WorkflowDetailPage({
   useEffect(() => {
     if (!query.data || !isAutoModeEnabled()) return
     const checkoutUrl = autoModeCheckoutUrl(query.data)
-    if (checkoutUrl) window.location.assign(checkoutUrl)
+    if (checkoutUrl && checkoutUrl !== openedCheckoutUrl.current) {
+      openExternalInNewTab(checkoutUrl)
+      openedCheckoutUrl.current = checkoutUrl
+    }
   }, [query.data])
 
   if (query.isPending) return <PageLoading />

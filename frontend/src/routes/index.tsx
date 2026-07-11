@@ -22,6 +22,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import PromptProgress from '../components/PromptProgress'
 import Toast, { type ToastMessage } from '../components/Toast'
 import { autoModeCheckoutUrl, isAutoModeEnabled } from '../features/auto-mode'
+import { openExternalInNewTab } from '../features/external-navigation'
 
 export const Route = createFileRoute('/')({ component: Launcher })
 
@@ -56,10 +57,10 @@ function Launcher() {
     mutationFn: startWorkflow,
     onSuccess: (view) => {
       queryClient.setQueryData(workflowKeys.detail(view.workflow.id), view)
+      queryClient.invalidateQueries({ queryKey: workflowKeys.list() })
       const checkoutUrl = isAutoModeEnabled() ? autoModeCheckoutUrl(view) : null
       if (checkoutUrl && typeof window !== 'undefined') {
-        window.location.assign(checkoutUrl)
-        return
+        openExternalInNewTab(checkoutUrl)
       }
       navigate({ to: '/workflows/$workflowId', params: { workflowId: view.workflow.id } })
     },

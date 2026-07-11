@@ -85,6 +85,11 @@ def start_workflow(body: schemas.StartWorkflowRequest):
     return orchestrator.start_workflow(body.prompt)
 
 
+@app.get("/api/workflows", response_model=schemas.WorkflowListResponse)
+def list_workflows():
+    return schemas.WorkflowListResponse(workflows=orchestrator.list_workflows())
+
+
 @app.get(
     "/api/workflows/{workflow_id}",
     response_model=schemas.WorkflowView,

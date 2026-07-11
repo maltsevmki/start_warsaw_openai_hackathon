@@ -124,6 +124,13 @@ class WorkflowOrchestrator:
     def get_workflow(self, workflow_id: str) -> schemas.WorkflowView:
         return self._view(self._record(workflow_id))
 
+    def list_workflows(self) -> list[schemas.WorkflowSummary]:
+        return sorted(
+            (record.workflow.model_copy(deep=True) for record in self.records.values()),
+            key=lambda workflow: workflow.updated_at,
+            reverse=True,
+        )
+
     def get_events(self, workflow_id: str) -> list[schemas.DomainEvent]:
         return [event.model_copy(deep=True) for event in self._record(workflow_id).events]
 

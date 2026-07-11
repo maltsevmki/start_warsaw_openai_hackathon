@@ -5,6 +5,7 @@ import type {
   ClarificationReply,
   OrderStatus,
   WorkflowView,
+  WorkflowSummary,
 } from './types'
 
 export const getHealth = (signal?: AbortSignal) =>
@@ -20,6 +21,9 @@ export const startWorkflow = (prompt: string) =>
     method: 'POST',
     body: JSON.stringify({ prompt }),
   })
+
+export const getWorkflows = (signal?: AbortSignal) =>
+  request<{ workflows: WorkflowSummary[] }>('/api/workflows', { signal })
 
 export const getWorkflow = (workflowId: string, signal?: AbortSignal) =>
   request<WorkflowView>(`/api/workflows/${workflowId}`, { signal })
