@@ -608,6 +608,7 @@ class ComparisonModule:
             item.rank = index
         viable = [item for item in ranked if not item.disqualifiers and item.score >= 50]
         best = viable[0] if viable and has_price_context else None
+        requirement_checks = self._requirement_checks(constraints, offers, best)
         confidence = min(0.99, (best.score / 100) if best else 0.0)
         recommendation = "proceed" if best and confidence >= 0.75 else "ask_user" if best else "stop"
         summary = (
@@ -629,6 +630,7 @@ class ComparisonModule:
             recommendation=recommendation,
             summary=summary,
             rankedOffers=ranked,
+            requirementChecks=requirement_checks,
             missingEvidence=(
                 best.risk_flags
                 if best
@@ -639,6 +641,68 @@ class ComparisonModule:
                 )
             ),
         )
+
+    def _requirement_checks(
+        self,
+        constraints: schemas.ShoppingConstraints,
+        offers: list[schemas.Offer],
+        best: schemas.RankedOffer | None,
+    ) -> list[schemas.RequirementCheck]:
+        """Itemize the user's hard requirements and whether the chosen offer meets each.
+
+        Only requirements the user actually stated are included, and every 'met'
+        value is read from the winning offer's real facts — no guessing.
+        """
+        if not best:
+            return []
+        offer = next((item for item in offers if item.id == best.offer_id), None)
+        if not offer:
+            return []
+        checks: list[schemas.RequirementCheck] = []
+        if constraints.budget_max:
+            checks.append(
+                schemas.RequirementCheck(
+                    key="budget",
+                    label=f"Within your budget of {constraints.budget_max.amount:g} PLN",
+                    met=offer.total.amount <= constraints.budget_max.amount,
+                )
+            )
+        if constraints.delivery_deadline:
+            checks.append(
+                schemas.RequirementCheck(
+                    key="delivery",
+                    label=f"Arrives in time — {offer.delivery.label}",
+                    met=offer.delivery.meets_deadline,
+                )
+            )
+        if constraints.compatibility:
+            checks.append(
+                schemas.RequirementCheck(
+                    key="compatibility",
+                    label="Works with your MacBook",
+                    met=offer.compatibility.macbook == "yes",
+                )
+            )
+        if constraints.required_return_days:
+            checks.append(
+                schemas.RequirementCheck(
+                    key="returns",
+                    label=f"{offer.returns.days}-day returns (you asked for {constraints.required_return_days}+)",
+                    met=offer.returns.days >= constraints.required_return_days,
+                )
+            )
+        required_size = next(
+            (item for item in constraints.must_have if item.startswith("size ")), None
+        )
+        if required_size:
+            checks.append(
+                schemas.RequirementCheck(
+                    key="size",
+                    label=f"Matches {required_size}",
+                    met=required_size in offer.title.lower(),
+                )
+            )
+        return checks
 
     @staticmethod
     def _hard_disqualifiers(

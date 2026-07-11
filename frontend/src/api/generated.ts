@@ -519,6 +519,8 @@ export interface components {
             summary: string;
             /** Rankedoffers */
             rankedOffers: components["schemas"]["RankedOffer"][];
+            /** Requirementchecks */
+            requirementChecks?: components["schemas"]["RequirementCheck"][];
             /** Missingevidence */
             missingEvidence?: string[];
         };
@@ -709,6 +711,22 @@ export interface components {
             proposalId: string;
             /** Reason */
             reason?: string | null;
+        };
+        /**
+         * RequirementCheck
+         * @description One hard requirement the user asked for, and whether the pick meets it.
+         *
+         *     Computed deterministically from the chosen offer's real facts (price, delivery,
+         *     compatibility, returns) versus the user's constraints — an honest, explainable
+         *     replacement for a vague confidence percentage.
+         */
+        RequirementCheck: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Met */
+            met: boolean;
         };
         /** Returns */
         Returns: {
