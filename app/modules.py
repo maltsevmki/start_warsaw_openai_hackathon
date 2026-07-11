@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app import schemas
+from app.domain.intent import ClassificationResult
 
 
 def utcnow() -> datetime:
@@ -57,16 +58,6 @@ class DemoProfileModule:
 
     def requires_approval(self, user_id: str, total: schemas.Money) -> bool:
         return self.get_profile(user_id).spending_policy.explicit_approval_required
-
-
-@dataclass
-class ClassificationResult:
-    status: str
-    constraints: schemas.ShoppingConstraints | None = None
-    summary: str | None = None
-    confidence: float = 0.95
-    question: schemas.ClarificationQuestion | None = None
-    block: schemas.PolicyBlock | None = None
 
 
 class IntentGuardrailModule:

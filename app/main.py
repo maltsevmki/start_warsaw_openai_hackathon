@@ -45,7 +45,12 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "mode": "fully_mocked", "catalogOffers": len(orchestrator.catalog.offers)}
+    return {
+        "status": "healthy",
+        "mode": "hybrid_capable",
+        "intentProvider": type(orchestrator.intent).__name__,
+        "catalogOffers": len(orchestrator.catalog.offers),
+    }
 
 
 @app.get("/api/demo/scenarios")

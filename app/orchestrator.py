@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app import schemas
+from app.factories import build_intent_module
 from app.modules import (
     ComparisonModule,
     ConsentAuditModule,
     DemoProfileModule,
     DomainError,
-    IntentGuardrailModule,
     MockCatalogModule,
     MockCheckoutModule,
     MockTrackingModule,
@@ -54,9 +54,9 @@ class WorkflowOrchestrator:
         "cancelled": [],
     }
 
-    def __init__(self):
+    def __init__(self, intent=None):
         self.profile = DemoProfileModule()
-        self.intent = IntentGuardrailModule()
+        self.intent = intent or build_intent_module()
         self.catalog = MockCatalogModule()
         self.comparison = ComparisonModule()
         self.proposals = ProposalModule()

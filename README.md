@@ -11,6 +11,7 @@ The demo includes:
 - checkout revalidation, mock payment, and an intentional out-of-stock failure;
 - order tracking simulation and a user-visible audit trail;
 - permissive CORS for a local frontend.
+- a provider-based intent boundary with mock and OpenAI structured-output adapters.
 
 ## Setup
 
@@ -32,6 +33,25 @@ uvicorn app.main:app --reload
 - Demo prompts: http://127.0.0.1:8000/api/demo/scenarios
 
 Workflow state is held in memory for predictable demos. Restarting the process or calling `POST /api/demo/reset` clears it. The catalog itself lives in `app/fixtures/catalog.json`.
+
+## OpenAI intent agent
+
+The default remains fully offline. To enable the OpenAI-backed intent extractor, copy the example configuration and add a newly created API key:
+
+```bash
+cp .env.example .env
+```
+
+Then set these values in `.env`:
+
+```dotenv
+INTENT_PROVIDER=openai
+OPENAI_API_KEY=your-rotated-key
+OPENAI_INTENT_MODEL=gpt-5-mini
+OPENAI_FALLBACK_TO_MOCK=true
+```
+
+The key is read only from the environment and `.env` is ignored by Git. Deterministic policy and missing-detail checks run before the model. Structured-output validation runs after it. When fallback is enabled, temporary OpenAI failures use the existing offline extractor so the demo stays usable.
 
 ## Frontend API
 
@@ -87,6 +107,9 @@ The contract and HTTP suites exercise all required scenarios, every specified mo
 ```text
 app/
   fixtures/catalog.json  # Local merchant offers and demo behaviors
+  adapters/              # OpenAI and future external provider implementations
+  domain/                # Provider-neutral domain result types
+  ports/                 # Contracts consumed by orchestration
   schemas.py             # Shared frontend/backend types and request contracts
   modules.py             # Intent, profile, catalog, comparison, consent, checkout, tracking
   orchestrator.py        # State ownership, module coordination, WorkflowView assembly
