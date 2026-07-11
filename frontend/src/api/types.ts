@@ -19,7 +19,7 @@ export type ClarificationReply =
   | { message: string }
   | { questionId: string; answers: ClarificationAnswer[] }
 
-export interface DemoScenarios {
+export interface ScenarioPrompts {
   happyPath: string
   clarification: string
   alternative: string

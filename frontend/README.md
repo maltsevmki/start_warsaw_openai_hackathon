@@ -1,6 +1,6 @@
 # ClearCart frontend
 
-A React, TypeScript, Vite, TanStack Router, and TanStack Query demo for the mocked agent-commerce API. The UI renders the API's canonical `WorkflowView`, gates every control through `availableActions`, and keeps proposal approval separate from checkout.
+A React, TypeScript, Vite, TanStack Router, and TanStack Query interface for the agent-commerce API. The UI renders the API's canonical `WorkflowView`, gates every control through `availableActions`, and keeps proposal approval separate from checkout.
 
 ## Setup
 
@@ -37,7 +37,7 @@ npm run build
 
 With the API running, refresh the generated contract using `npm run generate-api`.
 
-## Demo flows
+## Supported flows
 
 - Monitor: approve exact proposal terms, execute checkout separately, then simulate delivery.
 - Shoes: answer `Size 42, black, comfortable for walking.`

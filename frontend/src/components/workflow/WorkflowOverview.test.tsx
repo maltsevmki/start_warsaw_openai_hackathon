@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ComparisonResult } from '../../api/types'
-import { ComparisonSection } from './WorkflowOverview'
+import type { ComparisonResult, WorkflowView } from '../../api/types'
+import { ComparisonSection, PurchaseControlPanel } from './WorkflowOverview'
 
 afterEach(cleanup)
 
@@ -34,5 +34,36 @@ describe('ComparisonSection', () => {
     render(<ComparisonSection comparison={comparison} selectedOfferId="offer_1" canSelect onSelect={onSelect} />)
     fireEvent.click(screen.getAllByRole('button', { name: 'Choose' })[0])
     expect(onSelect).toHaveBeenCalledWith('offer_2')
+  })
+})
+
+describe('PurchaseControlPanel', () => {
+  it('turns canonical proposal and comparison data into client-facing guidance', () => {
+    const view = {
+      workflow: {
+        id: 'wf_test', userId: 'demo_user', state: 'awaiting_approval', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+        prompt: 'Find a monitor', summary: 'Review the proposal', availableActions: ['approve_proposal'],
+      },
+      history: {
+        currentRevisionId: 'rev_1',
+        revisions: [{ id: 'rev_1', workflowId: 'wf_test', sequence: 1, state: 'awaiting_approval', action: 'proposal_created', label: 'Proposal ready', summary: 'Review the proposal', createdAt: '2026-01-01T00:00:00Z', isCurrent: true, canRollback: false }],
+      },
+      comparison,
+      proposal: {
+        id: 'prop_1', workflowId: 'wf_test', version: 1, status: 'created', offerId: 'offer_2', merchantName: 'Merchant', title: 'Monitor Two', quantity: 1,
+        lineItems: [], subtotal: { amount: 850, currency: 'PLN' }, taxesAndFees: { amount: 49, currency: 'PLN' }, total: { amount: 899, currency: 'PLN' },
+        delivery: { label: 'Arrives tomorrow', earliest: '2026-01-02', latest: '2026-01-02' }, returns: { returnable: true, days: 30, label: '30-day returns' },
+        warranty: { months: 24, label: '2-year warranty' }, paymentMethodLabel: 'Card ending 4242', approvalText: 'Approve', expiresAt: '2026-01-01T01:00:00Z', hash: 'sha256:test',
+      },
+      events: [],
+    } as WorkflowView
+
+    render(<PurchaseControlPanel view={view} />)
+    expect(screen.getByText('Purchase control')).toBeTruthy()
+    expect(screen.getByText('Review the exact terms')).toBeTruthy()
+    expect(screen.getByText('Shorter warranty')).toBeTruthy()
+    expect(screen.getByText('What you need to do')).toBeTruthy()
+    expect(screen.getByText(/review the exact terms, then approve or decline/i)).toBeTruthy()
+    expect(screen.queryByText('Audit trail')).toBeNull()
   })
 })
