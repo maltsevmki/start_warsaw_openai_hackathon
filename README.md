@@ -85,7 +85,7 @@ Clarifications include a renderable `fields` array. The existing free-text reply
 
 The backend rejects stale question IDs, unknown or duplicate fields, missing required fields, and invalid numeric values before reclassifying the request.
 
-Every completed user-visible mutation adds an immutable entry to `history.revisions`. Send a prior `revisionId` to the rollback endpoint to restore its complete canonical snapshot. The restore is recorded as a new child revision, so abandoned branches remain visible and the domain-event audit log stays append-only. In the fully mocked checkout flow, restoring a pre-order revision records a compensating mock cancellation before clearing order data; a real commerce adapter must replace that rule with an actual merchant-side compensation or reject the rollback.
+Every completed user-visible mutation adds an immutable entry to `history.revisions`. Each revision includes structured `decision` context when applicable: the clarification question, alternative choices, exact approval terms, checkout failure, policy stop, or order status that the user saw at that point. Send a prior `revisionId` to the rollback endpoint to restore its complete canonical snapshot. The restore is recorded as a new child revision, so abandoned branches remain visible and the domain-event audit log stays append-only. In the fully mocked checkout flow, restoring a pre-order revision records a compensating mock cancellation before clearing order data; a real commerce adapter must replace that rule with an actual merchant-side compensation or reject the rollback.
 
 ## Required demo scenarios
 

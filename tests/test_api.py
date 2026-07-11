@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
+from app.adapters.openai_research import OpenAIResearchAgent
 from app.main import app, orchestrator
+from app.modules import MockCatalogModule, MockCheckoutModule
 
 
 client = TestClient(app)
@@ -146,6 +148,29 @@ def test_invalid_approval_is_rejected_before_checkout():
     )
     assert response.status_code == 409
     assert "hash" in response.json()["detail"].lower()
+
+
+def test_live_research_failure_is_reported_as_a_service_error(monkeypatch):
+    class FailingResponses:
+        def parse(self, **kwargs):
+            raise RuntimeError("web search is unavailable")
+
+    class FailingClient:
+        responses = FailingResponses()
+
+    catalog = MockCatalogModule()
+    catalog._research_agent = OpenAIResearchAgent(
+        api_key="", client=FailingClient(), deterministic=catalog
+    )
+    monkeypatch.setattr(orchestrator, "catalog", catalog)
+    monkeypatch.setattr(orchestrator, "checkout", MockCheckoutModule(catalog))
+
+    response = client.post("/api/workflows", json={"prompt": HAPPY_PROMPT})
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Live product research is temporarily unavailable. Please try again."
+    }
 
 
 def test_user_can_select_another_top_offer_before_approval():

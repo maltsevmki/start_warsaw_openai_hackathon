@@ -7,6 +7,7 @@ from app import models, schemas
 from app.database import Base, engine, get_db
 from app.modules import DomainError
 from app.orchestrator import WorkflowOrchestrator
+from app.settings import Settings
 
 
 Base.metadata.create_all(bind=engine)
@@ -24,7 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-orchestrator = WorkflowOrchestrator()
+orchestrator = WorkflowOrchestrator(settings=Settings.from_env())
 
 
 @app.exception_handler(DomainError)

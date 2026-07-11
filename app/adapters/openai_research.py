@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict
@@ -47,13 +47,13 @@ Do not claim checkout is complete, and do not return citations or prose outside 
 
 
 class OpenAIResearchAgent:
-    """Web-search catalog adapter with a deterministic fixture fallback."""
+    """Web-search catalog adapter for live product research."""
 
     def __init__(
         self,
         api_key: str,
-        model: str = "gpt-5-mini",
-        timeout_seconds: float = 20,
+        model: str = "gpt-5.4-mini",
+        timeout_seconds: float = 90,
         client: OpenAI | None = None,
         deterministic: MockCatalogModule | None = None,
     ):
@@ -62,7 +62,9 @@ class OpenAIResearchAgent:
         if deterministic is None:
             raise ValueError("A deterministic catalog fallback is required")
         self.model = model
-        self.client = client or OpenAI(api_key=api_key, timeout=timeout_seconds, max_retries=1)
+        # A web-search response can take longer than a plain model call. One
+        # bounded attempt is clearer and faster than retrying an agentic search.
+        self.client = client or OpenAI(api_key=api_key, timeout=timeout_seconds, max_retries=0)
         self.deterministic = deterministic
 
     def search(
@@ -77,15 +79,27 @@ class OpenAIResearchAgent:
                 text_format=OfferList,
             )
             output = response.output_parsed
-            if output is None or not output.offers:
+            if output is None:
                 raise ValueError("OpenAI research returned no structured offers")
+            if not output.offers:
+                return self.deterministic.evaluate_offers(
+                    constraints,
+                    [],
+                    cache=True,
+                    include_fixture_alternatives=False,
+                )
             offers = [schemas.Offer.model_validate(offer.model_dump(by_alias=True)) for offer in output.offers]
             self._validate_offers(offers, constraints)
-            return self.deterministic.evaluate_offers(constraints, offers, cache=True)
-        except Exception:
-            # Live research must never make the demo unavailable. The fixture
-            # path remains the authoritative offline behavior.
-            return self.deterministic.search_fixtures(constraints, profile)
+            return self.deterministic.evaluate_offers(
+                constraints,
+                offers,
+                cache=True,
+                include_fixture_alternatives=False,
+            )
+        except Exception as exc:
+            _raise_research_unavailable(
+                "Live product research is temporarily unavailable. Please try again.", exc
+            )
 
     def _input_for(
         self, constraints: schemas.ShoppingConstraints, profile: schemas.DemoUserProfile
@@ -121,3 +135,26 @@ class OpenAIResearchAgent:
                 raise ValueError("OpenAI research returned an invalid rating")
             if offer.returns.days < 0 or offer.warranty.months < 0:
                 raise ValueError("OpenAI research returned invalid terms")
+
+
+class UnavailableCatalogResearch:
+    """Returns a user-visible error when live research is selected but unavailable."""
+
+    def __init__(self, message: str):
+        self.message = message
+
+    def search(
+        self, constraints: schemas.ShoppingConstraints, profile: schemas.DemoUserProfile
+    ) -> CatalogSearchResult:
+        _raise_research_unavailable(self.message)
+
+
+def _raise_research_unavailable(message: str, cause: Exception | None = None) -> NoReturn:
+    # Importing at call time avoids a modules/adapters import cycle while using
+    # the application's standard FastAPI error shape.
+    from app.modules import DomainError
+
+    error = DomainError(message, 503)
+    if cause:
+        raise error from cause
+    raise error

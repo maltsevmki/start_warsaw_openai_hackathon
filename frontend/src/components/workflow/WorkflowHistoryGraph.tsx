@@ -1,4 +1,4 @@
-import { GitBranch, History, RotateCcw } from 'lucide-react'
+import { GitBranch, History, Info, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { formatDate, stateLabel } from '../../api/format'
 import type { WorkflowRevision, WorkflowView } from '../../api/types'
@@ -50,9 +50,27 @@ export function WorkflowHistoryGraph({
       {selected && (
         <div className="revision-selection" aria-live="polite">
           <div>
-            <span>Revision {selected.sequence} · {stateLabel(selected.state)}</span>
+            <span>Revision {selected.sequence} · {stateLabel(selected.state)} · {formatAction(selected.action)}</span>
             <strong>{selected.label}</strong>
-            <small>{selected.summary} · {formatDate(selected.createdAt)}</small>
+            <small>{selected.summary}</small>
+            <small>Captured {formatDate(selected.createdAt)}</small>
+            {selected.decision && (
+              <div className="revision-decision-context">
+                <span>Decision context · {formatAction(selected.decision.kind)}</span>
+                <strong>{selected.decision.title}</strong>
+                {selected.decision.description && <p>{selected.decision.description}</p>}
+                {(selected.decision.facts?.length ?? 0) > 0 && (
+                  <dl className="revision-decision-facts">
+                    {selected.decision.facts?.map((fact, index) => (
+                      <div key={`${fact.label}-${index}`}>
+                        <dt>{fact.label}</dt>
+                        <dd>{fact.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+            )}
           </div>
           {selected.isCurrent ? (
             <span className="current-revision-label"><History size={14} /> Current revision</span>
@@ -86,20 +104,29 @@ function RevisionBranch({
   const rollbackSource = node.rollbackFromRevisionId
     ? byId.get(node.rollbackFromRevisionId)
     : undefined
+  const preview = node.decision?.title ?? node.summary
   return (
     <div className="revision-branch" role="treeitem" aria-expanded={node.children.length > 0 || undefined}>
       <button
         type="button"
         className={`revision-node ${node.isCurrent ? 'current' : ''} ${selectedId === node.id ? 'selected' : ''}`}
+        aria-label={`Revision ${node.sequence}: ${node.label}. ${preview}. ${stateLabel(node.state)}. Captured ${formatDate(node.createdAt)}.${node.isCurrent ? ' Current revision.' : ''} View decision details.`}
         aria-pressed={selectedId === node.id}
         onClick={() => onSelect(node.id)}
       >
         <span className="revision-sequence">{node.sequence}</span>
         <span className="revision-node-copy">
-          <strong>{node.label}</strong>
-          <small>{stateLabel(node.state)}</small>
+          <span className="revision-node-title">
+            <strong>{node.label}</strong>
+            {node.isCurrent && <span className="revision-current-dot" aria-label="Current revision" />}
+          </span>
+          <span className="revision-node-summary">{preview}</span>
+          <span className="revision-node-meta">
+            <span>{stateLabel(node.state)}</span>
+            <time dateTime={node.createdAt}>{formatNodeTime(node.createdAt)}</time>
+            <span className="revision-detail-hint"><Info size={10} aria-hidden="true" /> Decision</span>
+          </span>
         </span>
-        {node.isCurrent && <span className="revision-current-dot" aria-label="Current revision" />}
         {rollbackSource && <span className="revision-jump">↶ from {rollbackSource.sequence}</span>}
       </button>
       {node.children.length > 0 && (
@@ -118,6 +145,14 @@ function RevisionBranch({
     </div>
   )
 }
+
+const nodeTime = new Intl.DateTimeFormat('en-PL', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const formatNodeTime = (value: string) => nodeTime.format(new Date(value))
+const formatAction = (action: string) => action.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 
 function buildTree(revisions: WorkflowRevision[]) {
   const byId = new Map<string, RevisionNode>()

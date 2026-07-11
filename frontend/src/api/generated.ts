@@ -703,6 +703,11 @@ export interface components {
             /** Revisionid */
             revisionId: string;
         };
+        /** SelectOfferRequest */
+        SelectOfferRequest: {
+            /** Offerid */
+            offerId: string;
+        };
         /** ShoppingConstraints */
         ShoppingConstraints: {
             /** Productcategory */
@@ -782,6 +787,7 @@ export interface components {
             label: string;
             /** Summary */
             summary: string;
+            decision?: components["schemas"]["WorkflowRevisionDecision"] | null;
             /**
              * Createdat
              * Format: date-time
@@ -791,6 +797,27 @@ export interface components {
             isCurrent: boolean;
             /** Canrollback */
             canRollback: boolean;
+        };
+        /** WorkflowRevisionDecision */
+        WorkflowRevisionDecision: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "clarification" | "alternative" | "proposal" | "approval" | "checkout_failure" | "order" | "policy" | "result";
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Facts */
+            facts?: components["schemas"]["WorkflowRevisionFact"][];
+        };
+        /** WorkflowRevisionFact */
+        WorkflowRevisionFact: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
         };
         /** WorkflowSummary */
         WorkflowSummary: {
@@ -821,7 +848,7 @@ export interface components {
             /** Summary */
             summary: string;
             /** Availableactions */
-            availableActions: ("reply_to_clarification" | "accept_alternative" | "reject_alternative" | "approve_proposal" | "reject_proposal" | "execute_checkout" | "simulate_tracking" | "cancel" | "rollback")[];
+            availableActions: ("reply_to_clarification" | "accept_alternative" | "reject_alternative" | "approve_proposal" | "reject_proposal" | "select_offer" | "execute_checkout" | "simulate_tracking" | "cancel" | "rollback")[];
         };
         /** WorkflowView */
         WorkflowView: {
