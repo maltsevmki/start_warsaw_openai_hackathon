@@ -43,7 +43,7 @@ def build_catalog_research_module(
         return OpenAIResearchAgent(
             api_key=settings.openai_api_key,
             model=settings.openai_research_model,
-            timeout_seconds=settings.openai_timeout_seconds,
+            timeout_seconds=settings.openai_research_timeout_seconds,
             deterministic=deterministic,
         )
     raise RuntimeError(

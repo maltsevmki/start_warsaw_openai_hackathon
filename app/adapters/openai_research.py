@@ -53,7 +53,7 @@ class OpenAIResearchAgent:
         self,
         api_key: str,
         model: str = "gpt-5-mini",
-        timeout_seconds: float = 20,
+        timeout_seconds: float = 90,
         client: OpenAI | None = None,
         deterministic: MockCatalogModule | None = None,
     ):
@@ -62,7 +62,9 @@ class OpenAIResearchAgent:
         if deterministic is None:
             raise ValueError("A deterministic catalog fallback is required")
         self.model = model
-        self.client = client or OpenAI(api_key=api_key, timeout=timeout_seconds, max_retries=1)
+        # A web-search response can take longer than a plain model call. One
+        # bounded attempt is clearer and faster than retrying an agentic search.
+        self.client = client or OpenAI(api_key=api_key, timeout=timeout_seconds, max_retries=0)
         self.deterministic = deterministic
 
     def search(

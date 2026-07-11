@@ -27,6 +27,7 @@ class Settings:
     stripe_test_payment_method: str = "pm_card_visa"
     catalog_provider: str = "mock"
     openai_research_model: str = "gpt-5-mini"
+    openai_research_timeout_seconds: float = 90
     comparison_provider: str = "mock"
     openai_comparison_model: str = "gpt-5-mini"
 
@@ -43,6 +44,9 @@ class Settings:
             stripe_test_payment_method=os.getenv("STRIPE_TEST_PAYMENT_METHOD", "pm_card_visa"),
             catalog_provider=os.getenv("CATALOG_PROVIDER", "mock").strip().lower(),
             openai_research_model=os.getenv("OPENAI_RESEARCH_MODEL", "gpt-5-mini"),
+            openai_research_timeout_seconds=float(
+                os.getenv("OPENAI_RESEARCH_TIMEOUT_SECONDS", "90")
+            ),
             comparison_provider=os.getenv("COMPARISON_PROVIDER", "mock").strip().lower(),
             openai_comparison_model=os.getenv("OPENAI_COMPARISON_MODEL", "gpt-5-mini"),
         )

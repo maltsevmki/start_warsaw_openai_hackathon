@@ -43,6 +43,13 @@ def test_intent_classifies_required_scenarios(profile, prompt, status):
     assert IntentGuardrailModule().classify(prompt, [], profile).status == status
 
 
+def test_intent_classifies_iphone_for_live_research(profile):
+    result = IntentGuardrailModule().classify("Buy iPhone 12 please", [], profile)
+
+    assert result.status == "valid_request"
+    assert result.constraints.product_category == "smartphone"
+
+
 def test_deterministic_guardrail_handles_localized_prescription_request(profile):
     result = IntentGuardrailModule().classify("Kup mi leki na receptę", [], profile)
     assert result.status == "policy_violation"

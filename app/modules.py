@@ -74,6 +74,7 @@ class IntentGuardrailModule:
     CATEGORY_KEYWORDS = {
         "monitor": ("monitor", "display", "screen"),
         "headphones": ("headphone", "headphones", "headset"),
+        "smartphone": ("smartphone", "iphone", "android phone", "mobile phone"),
         "shoes": ("shoe", "shoes", "sneaker", "sneakers"),
         "clothing": ("shirt", "jacket", "trousers", "dress", "clothing", "clothes"),
         "usb_c_hub": ("usb-c hub", "usb c hub", "hub", "dongle"),
