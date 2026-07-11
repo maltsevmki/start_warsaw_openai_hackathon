@@ -70,10 +70,18 @@ class DemoProfileModule:
 
 
 class IntentGuardrailModule:
+    LOWEST_PRICE_PHRASES = (
+        "cheapest",
+        "lowest price",
+        "lowest-priced",
+        "least expensive",
+        "most affordable",
+    )
     CATEGORY_KEYWORDS = {
         "monitor": ("monitor", "display", "screen"),
         "headphones": ("headphone", "headphones", "headset"),
         "smartphone": ("smartphone", "iphone", "android phone", "mobile phone"),
+        "toothbrush": ("toothbrush", "toothbrushes"),
         "shoes": ("shoe", "shoes", "sneaker", "sneakers"),
         "clothing": ("shirt", "jacket", "trousers", "dress", "clothing", "clothes"),
         "usb_c_hub": ("usb-c hub", "usb c hub", "hub", "dongle"),
@@ -109,12 +117,21 @@ class IntentGuardrailModule:
                 ["Size M", "EU 40"],
             )
         if category is None:
+            if constraints.budget_max or self.requests_lowest_price(constraints):
+                return self.clarification_result(
+                    constraints,
+                    "product_category",
+                    "What kind of product would you like?",
+                    ["Electric toothbrush", "Noise-cancelling headphones"],
+                )
             return self.clarification_result(
                 constraints,
                 "product_category_and_budget",
                 "What kind of product would you like, and what is your maximum budget?",
                 ["Headphones under 300 PLN", "A desk lamp under 150 PLN"],
             )
+        if self.needs_budget(constraints):
+            return self.budget_clarification_result(constraints)
 
         summary_bits = [f"Looking for {category.replace('_', ' ')}"]
         if constraints.budget_max:
@@ -126,6 +143,27 @@ class IntentGuardrailModule:
             constraints=constraints,
             summary=", ".join(summary_bits) + ".",
             confidence=0.97,
+        )
+
+    @classmethod
+    def requests_lowest_price(cls, constraints: schemas.ShoppingConstraints) -> bool:
+        lower = constraints.query.lower()
+        return "cheapest" in constraints.must_have or any(
+            phrase in lower for phrase in cls.LOWEST_PRICE_PHRASES
+        )
+
+    @classmethod
+    def needs_budget(cls, constraints: schemas.ShoppingConstraints) -> bool:
+        return constraints.budget_max is None and not cls.requests_lowest_price(constraints)
+
+    def budget_clarification_result(
+        self, constraints: schemas.ShoppingConstraints
+    ) -> ClassificationResult:
+        return self.clarification_result(
+            constraints,
+            "budget_max",
+            "What is the maximum amount you want to spend?",
+            ["Maximum 150 PLN", "Up to 300 PLN"],
         )
 
     def check_guardrails(self, text: str) -> ClassificationResult | None:
@@ -233,6 +271,15 @@ class IntentGuardrailModule:
                     placeholder="300",
                 ),
             ]
+        if expected_field == "budget_max":
+            return [
+                schemas.ClarificationField(
+                    name="budget_max",
+                    label="Maximum budget (PLN)",
+                    inputType="number",
+                    placeholder="300",
+                )
+            ]
         return [
             schemas.ClarificationField(
                 name=expected_field,
@@ -248,7 +295,7 @@ class IntentGuardrailModule:
             None,
         )
         budget_match = re.search(
-            r"(?:under|below|up to|max(?:imum)?(?: of)?)\s*(?:pln\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:pln|zł|zl)?",
+            r"(?:under|below|up to|max(?:imum)?(?:\s+budget)?(?:\s*\(pln\))?(?:\s+of)?|budget(?:\s+of)?)\s*:?\s*(?:pln\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:pln|zł|zl)?",
             lower,
         )
         budget = (
@@ -268,7 +315,7 @@ class IntentGuardrailModule:
         nice_to_have: list[str] = []
         if "noise cancelling" in lower or "noise-cancelling" in lower:
             must_have.append("noise cancelling")
-        if "cheapest" in lower:
+        if any(phrase in lower for phrase in self.LOWEST_PRICE_PHRASES):
             must_have.append("cheapest")
         size = re.search(r"\b(?:size\s*)?(3[5-9]|4[0-9]|5[0-2])\b", lower)
         if size and category == "shoes":
@@ -472,43 +519,40 @@ class ComparisonModule:
         profile: schemas.DemoUserProfile,
         offers: list[schemas.Offer],
     ) -> schemas.ComparisonResult:
-        lowest = min((o.total.amount for o in offers if o.stock_status != "out_of_stock"), default=0)
         ranked: list[schemas.RankedOffer] = []
         required_size = next(
             (item for item in constraints.must_have if item.startswith("size ")), None
         )
+        lowest_price_requested = IntentGuardrailModule.requests_lowest_price(constraints)
+        has_price_context = constraints.budget_max is not None or lowest_price_requested
+        eligible_offers = [
+            offer
+            for offer in offers
+            if not self._hard_disqualifiers(offer, constraints, required_size)
+        ]
+        lowest = min((offer.total.amount for offer in eligible_offers), default=0)
         for offer in offers:
             score = 0.0
             reasons: list[str] = []
             tradeoffs: list[str] = []
-            disqualifiers: list[str] = []
+            disqualifiers = self._hard_disqualifiers(offer, constraints, required_size)
 
-            if offer.stock_status == "out_of_stock":
-                disqualifiers.append("Out of stock")
-            if constraints.delivery_deadline and not offer.delivery.meets_deadline:
-                disqualifiers.append("Misses the required delivery deadline")
-            if constraints.budget_max and offer.total.amount > constraints.budget_max.amount:
-                disqualifiers.append("Exceeds the maximum budget")
-            if constraints.compatibility and offer.compatibility.macbook != "yes":
-                disqualifiers.append(
-                    "Incompatible with MacBook"
-                    if offer.compatibility.macbook == "no"
-                    else "MacBook compatibility is unverified"
-                )
-            if constraints.required_return_days and offer.returns.days < constraints.required_return_days:
-                disqualifiers.append("Return window is shorter than required")
-            if required_size and required_size not in offer.title.lower():
-                disqualifiers.append(f"Does not match required {required_size}")
-
-            if "cheapest" in constraints.must_have:
+            if lowest_price_requested:
                 budget_score = 30 if offer.total.amount == lowest else max(0, 30 - (offer.total.amount - lowest) / 8)
+                if offer.total.amount == lowest and not disqualifiers:
+                    reasons.append("Lowest-priced eligible offer")
+                else:
+                    tradeoffs.append("Costs more than the lowest-priced eligible offer")
+            elif constraints.budget_max:
+                budget_score = 30 if offer.total.amount <= constraints.budget_max.amount else 0
+                if budget_score == 30:
+                    reasons.append("Within the maximum budget")
+                else:
+                    tradeoffs.append("Exceeds the maximum budget")
             else:
-                budget_score = 30 if not constraints.budget_max or offer.total.amount <= constraints.budget_max.amount else 0
+                budget_score = 0
+                tradeoffs.append("No maximum budget or lowest-price objective was provided")
             score += budget_score
-            if budget_score == 30:
-                reasons.append("Meets the budget target")
-            else:
-                tradeoffs.append("Costs more than the requested budget or lowest option")
 
             if offer.delivery.meets_deadline:
                 score += 25
@@ -550,11 +594,20 @@ class ComparisonModule:
                 )
             )
 
-        ranked.sort(key=lambda item: item.score, reverse=True)
+        if lowest_price_requested:
+            ranked.sort(
+                key=lambda item: (
+                    bool(item.disqualifiers),
+                    item.total.amount,
+                    -item.score,
+                )
+            )
+        else:
+            ranked.sort(key=lambda item: item.score, reverse=True)
         for index, item in enumerate(ranked, start=1):
             item.rank = index
         viable = [item for item in ranked if not item.disqualifiers and item.score >= 50]
-        best = viable[0] if viable else None
+        best = viable[0] if viable and has_price_context else None
         confidence = min(0.99, (best.score / 100) if best else 0.0)
         recommendation = "proceed" if best and confidence >= 0.75 else "ask_user" if best else "stop"
         summary = (
@@ -577,9 +630,40 @@ class ComparisonModule:
             summary=summary,
             rankedOffers=ranked,
             missingEvidence=(
-                best.risk_flags if best else ["No offer satisfies all hard requirements"]
+                best.risk_flags
+                if best
+                else (
+                    ["Maximum budget or lowest-price objective is required"]
+                    if not has_price_context
+                    else ["No offer satisfies all hard requirements"]
+                )
             ),
         )
+
+    @staticmethod
+    def _hard_disqualifiers(
+        offer: schemas.Offer,
+        constraints: schemas.ShoppingConstraints,
+        required_size: str | None,
+    ) -> list[str]:
+        disqualifiers: list[str] = []
+        if offer.stock_status == "out_of_stock":
+            disqualifiers.append("Out of stock")
+        if constraints.delivery_deadline and not offer.delivery.meets_deadline:
+            disqualifiers.append("Misses the required delivery deadline")
+        if constraints.budget_max and offer.total.amount > constraints.budget_max.amount:
+            disqualifiers.append("Exceeds the maximum budget")
+        if constraints.compatibility and offer.compatibility.macbook != "yes":
+            disqualifiers.append(
+                "Incompatible with MacBook"
+                if offer.compatibility.macbook == "no"
+                else "MacBook compatibility is unverified"
+            )
+        if constraints.required_return_days and offer.returns.days < constraints.required_return_days:
+            disqualifiers.append("Return window is shorter than required")
+        if required_size and required_size not in offer.title.lower():
+            disqualifiers.append(f"Does not match required {required_size}")
+        return disqualifiers
 
     @staticmethod
     def _build_rationale(settings: Settings | None) -> ComparisonRationaleModule | None:
