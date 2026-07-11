@@ -60,4 +60,5 @@ describe('DecisionPanel action gating', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm decline' }))
     expect(onReject).toHaveBeenCalledWith('Prefer another merchant')
   })
+
 })

@@ -76,6 +76,13 @@ a { color: inherit; }
 .brand strong { font-size: 18px; font-weight: 800; letter-spacing: -.035em; line-height: 1.1; }
 .brand small { margin-top: 2px; color: var(--ink-faint); font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .header-trust { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.auto-mode-toggle { display: inline-flex; align-items: center; gap: 7px; height: 38px; border: 1px solid var(--line); border-radius: 99px; padding: 0 9px 0 11px; color: var(--ink-soft); background: color-mix(in srgb, var(--paper) 90%, transparent); cursor: pointer; transition: color .18s ease, border-color .18s ease, background .18s ease; }
+.auto-mode-toggle span { font-size: 11px; font-weight: 800; white-space: nowrap; }
+.auto-mode-toggle i { position: relative; width: 28px; height: 16px; border-radius: 99px; background: var(--line-strong); transition: background .18s ease; }
+.auto-mode-toggle i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); box-shadow: 0 1px 3px rgba(0,0,0,.18); transition: transform .18s ease; }
+.auto-mode-toggle.enabled { border-color: color-mix(in srgb, var(--green) 38%, var(--line)); color: var(--green); background: var(--green-pale); }
+.auto-mode-toggle.enabled i { background: var(--green); }
+.auto-mode-toggle.enabled i::after { transform: translateX(12px); }
 .theme-icon-button { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; border: 1px solid var(--line); border-radius: 50%; padding: 0; color: var(--ink); background: color-mix(in srgb, var(--paper) 90%, transparent); box-shadow: 0 8px 24px rgba(21, 52, 43, .06); cursor: pointer; transition: color .18s ease, border-color .18s ease, transform .18s ease, background .18s ease; }
 .theme-icon-button:hover { transform: translateY(-2px) rotate(7deg); border-color: color-mix(in srgb, var(--green) 42%, var(--line)); color: var(--green); background: var(--green-pale); }
 
@@ -112,6 +119,25 @@ a { color: inherit; }
 .composer-card textarea { display: block; width: 100%; min-height: 170px; resize: vertical; border: 1px solid var(--line); border-radius: 13px; padding: 17px 18px; color: var(--ink); background: var(--cream); font-size: 15px; line-height: 1.65; }
 .composer-card textarea::placeholder { color: #9ca59f; }
 .composer-card textarea:focus { border-color: var(--green); outline: 3px solid color-mix(in srgb, var(--green) 16%, transparent); }
+.prompt-progress { min-height: 170px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line)); border-radius: 13px; padding: 16px 17px; background: linear-gradient(145deg, color-mix(in srgb, var(--green-pale) 42%, var(--cream)), var(--cream)); }
+.prompt-progress-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; }
+.prompt-progress-heading > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.prompt-progress-heading strong { font-size: 13px; }
+.prompt-progress-heading small { overflow: hidden; color: var(--ink-faint); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.thinking-orb { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px; color: white; background: var(--green); box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 25%, transparent); animation: thinking-pulse 1.8s ease-out infinite; }
+.prompt-progress ol { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.prompt-progress li { display: grid; grid-template-columns: 25px 1fr; align-items: start; min-height: 24px; color: var(--ink-faint); transition: color .24s ease, opacity .24s ease; }
+.prompt-progress li > span { display: grid; place-items: center; width: 19px; height: 19px; margin-top: 1px; border-radius: 50%; color: var(--ink-faint); background: color-mix(in srgb, var(--line) 60%, transparent); }
+.prompt-progress li > div { display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.prompt-progress li strong { font-size: 11px; line-height: 1.35; }
+.prompt-progress li small { color: var(--ink-soft); font-size: 10px; line-height: 1.4; animation: fade-up .24s ease both; }
+.prompt-progress li.complete { color: var(--ink-soft); }
+.prompt-progress li.complete > span { color: white; background: color-mix(in srgb, var(--green) 78%, var(--paper)); }
+.prompt-progress li.active { color: var(--ink); }
+.prompt-progress li.active > span { color: var(--green); background: var(--paper); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 10%, transparent); }
+.prompt-progress li.upcoming { opacity: .48; }
+.prompt-progress li.active + li { margin-top: 2px; }
+@keyframes thinking-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 25%, transparent); } 70%, 100% { box-shadow: 0 0 0 10px transparent; } }
 .composer-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 3px 0; }
 .composer-footer > span { display: flex; align-items: center; gap: 6px; color: var(--ink-faint); font-size: 12px; font-weight: 600; }
 
@@ -439,7 +465,7 @@ a { color: inherit; }
 }
 @media (max-width: 700px) {
   .page-width { width: min(100% - 24px, 1180px); }
-  .site-header { height: 62px; }.brand small, .header-trust { display: none; }.theme-icon-button { width: 40px; height: 40px; flex-basis: 40px; }
+  .site-header { height: 62px; }.brand small, .header-trust, .auto-mode-toggle span { display: none; }.auto-mode-toggle { width: 44px; padding: 0; justify-content: center; }.auto-mode-toggle i { display: none; }.theme-icon-button { width: 40px; height: 40px; flex-basis: 40px; }
   .launcher-hero { gap: 34px; min-height: auto; padding: 48px 0 70px; }.launcher-hero::after { bottom: 28px; }.hero-copy h1 { font-size: clamp(40px, 12vw, 56px); }.hero-copy > p { margin: 20px 0 24px; font-size: 15px; }.trust-points { grid-template-columns: 1fr; gap: 8px; }.trust-points span { grid-template-columns: auto 1fr; }
   .composer-card { padding: 13px; border-radius: 17px; }.composer-header small, .composer-footer > span { display: none; }.composer-card textarea { min-height: 145px; }.composer-footer { justify-content: flex-end; }
   .scenario-section { margin-bottom: 28px; padding: 27px 18px; border-radius: 22px; }.story-section { padding: 55px 0; }.scenario-heading { align-items: flex-start; flex-direction: column; }.scenario-grid { grid-template-columns: 1fr 1fr; }.scenario-card, .scenario-card:nth-child(-n+2) { grid-column: auto; min-height: 195px; }.scenario-card:first-child { grid-column: 1 / -1; }

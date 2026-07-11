@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ApiError } from '../../api/client'
 import { workflowKeys } from '../../api/query-keys'
 import type { ClarificationReply, OrderStatus, WorkflowView } from '../../api/types'
@@ -17,6 +17,7 @@ import {
 import { DecisionPanel } from '../../components/workflow/DecisionPanel'
 import { WorkflowHistoryGraph } from '../../components/workflow/WorkflowHistoryGraph'
 import Toast, { type ToastMessage } from '../../components/Toast'
+import { autoModeCheckoutUrl, isAutoModeEnabled } from '../auto-mode'
 import {
   ComparisonSection,
   PurchaseControlPanel,
@@ -24,7 +25,7 @@ import {
   WorkflowHeader,
 } from '../../components/workflow/WorkflowOverview'
 
-type Operation = { name: string; run: () => Promise<WorkflowView> }
+type Operation = { name: string; run: () => Promise<WorkflowView>; redirectAfterApproval?: boolean }
 
 function successMessage(operation: string, view: WorkflowView): ToastMessage {
   if (operation === 'clarify') return { id: Date.now(), text: 'Details saved. Research continued.' }
@@ -64,18 +65,28 @@ export function WorkflowDetailPage({
       queryClient.setQueryData(workflowKeys.events(workflowId), view.events)
       setAnnouncement(view.workflow.summary)
       setToast(successMessage(operation.name, view))
+      if (isAutoModeEnabled() || operation.redirectAfterApproval) {
+        const checkoutUrl = autoModeCheckoutUrl(view)
+        if (checkoutUrl && typeof window !== 'undefined') window.location.assign(checkoutUrl)
+      }
     },
     onError: (error) => setToast({ id: Date.now(), text: error.message, tone: 'error' }),
   })
+
+  useEffect(() => {
+    if (!query.data || !isAutoModeEnabled()) return
+    const checkoutUrl = autoModeCheckoutUrl(query.data)
+    if (checkoutUrl) window.location.assign(checkoutUrl)
+  }, [query.data])
 
   if (query.isPending) return <PageLoading />
   if (query.isError) return <PageError error={query.error} onRetry={() => query.refetch()} />
 
   const view = query.data
-  const run = (name: string, operation: () => Promise<WorkflowView>) => {
+  const run = (name: string, operation: () => Promise<WorkflowView>, redirectAfterApproval = false) => {
     setAnnouncement('')
     setToast(null)
-    mutation.mutate({ name, run: operation })
+    mutation.mutate({ name, run: operation, redirectAfterApproval })
   }
   const message = mutation.error instanceof Error ? mutation.error.message : null
   const busy = mutation.isPending ? mutation.variables.name : null
@@ -102,7 +113,7 @@ export function WorkflowDetailPage({
               onAlternative={(accepted, alternativeId) => run('alternative', () => respondToAlternative(workflowId, { accepted, ...(alternativeId ? { alternativeId } : {}) }))}
               onApprove={() => {
                 if (!view.proposal) return
-                run('approve', () => approveProposal(workflowId, { proposalId: view.proposal!.id, proposalVersion: view.proposal!.version, proposalHash: view.proposal!.hash, approved: true }))
+                run('approve', () => approveProposal(workflowId, { proposalId: view.proposal!.id, proposalVersion: view.proposal!.version, proposalHash: view.proposal!.hash, approved: true }), isAutoModeEnabled())
               }}
               onReject={(reason) => {
                 if (!view.proposal) return

@@ -19,7 +19,9 @@ import { appKeys, workflowKeys } from '../api/query-keys'
 import type { ScenarioPrompts } from '../api/types'
 import { getHealth, getScenarioPrompts, resetWorkspace, startWorkflow } from '../api/workflow-api'
 import ConfirmDialog from '../components/ConfirmDialog'
+import PromptProgress from '../components/PromptProgress'
 import Toast, { type ToastMessage } from '../components/Toast'
+import { autoModeCheckoutUrl, isAutoModeEnabled } from '../features/auto-mode'
 
 export const Route = createFileRoute('/')({ component: Launcher })
 
@@ -54,6 +56,11 @@ function Launcher() {
     mutationFn: startWorkflow,
     onSuccess: (view) => {
       queryClient.setQueryData(workflowKeys.detail(view.workflow.id), view)
+      const checkoutUrl = isAutoModeEnabled() ? autoModeCheckoutUrl(view) : null
+      if (checkoutUrl && typeof window !== 'undefined') {
+        window.location.assign(checkoutUrl)
+        return
+      }
       navigate({ to: '/workflows/$workflowId', params: { workflowId: view.workflow.id } })
     },
   })
@@ -88,8 +95,7 @@ function Launcher() {
         </div>
         <div className="composer-card">
           <div className="composer-header"><div><span className="agent-orb"><Search size={18} /></span><div><strong>What should I find?</strong><small>Describe the outcome in your own words.</small></div></div><span className={`api-status ${health.isSuccess ? 'online' : health.isError ? 'offline' : ''}`}><i />{health.isSuccess ? 'Ready' : health.isError ? 'Offline' : 'Connecting'}</span></div>
-          <label className="sr-only" htmlFor="shopping-prompt">Shopping request</label>
-          <textarea id="shopping-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Find me a reliable monitor under 1000 PLN that works with my MacBook and arrives tomorrow…" onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') submit() }} />
+          {start.isPending ? <PromptProgress prompt={prompt} /> : <><label className="sr-only" htmlFor="shopping-prompt">Shopping request</label><textarea id="shopping-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Find me a reliable monitor under 1000 PLN that works with my MacBook and arrives tomorrow…" onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') submit() }} /></>}
           {fieldError && <p className="field-error">{fieldError}</p>}
           {start.error && <div className="action-error" role="alert">{start.error.message}</div>}
           <div className="composer-footer"><span><Zap size={14} /> Terms are revalidated before checkout</span><button className="button button-primary" onClick={submit} disabled={start.isPending}>{start.isPending ? <><span className="mini-spinner" /> Starting…</> : <>Start search <ArrowRight size={17} /></>}</button></div>

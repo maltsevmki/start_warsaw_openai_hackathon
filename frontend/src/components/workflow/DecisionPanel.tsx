@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   Clipboard,
-  CreditCard,
   ExternalLink,
   LoaderCircle,
   Package,
@@ -29,7 +28,6 @@ interface DecisionPanelProps {
   onAlternative: (accepted: boolean, alternativeId?: string) => void
   onApprove: () => void
   onReject: (reason?: string) => void
-  onCheckout: () => void
   onCancel: () => void
   onSimulate: (status: OrderStatus) => void
 }
@@ -249,8 +247,9 @@ function ProposalCard({ view, actions, busy, error, onApprove, onReject, onCance
   )
 }
 
-function ApprovalReceipt({ view, actions, busy, error, onCheckout, onCancel }: CommonProps) {
+function ApprovalReceipt({ view, actions, busy, error, onCancel }: CommonProps) {
   const approval = view.approval!
+  const checkoutUrl = view.proposal?.checkoutUrl ?? view.proposal?.productUrl
   const [copied, setCopied] = useState(false)
   const copyHash = async () => { await navigator.clipboard.writeText(approval.proposalHash); setCopied(true) }
   return (
@@ -266,7 +265,8 @@ function ApprovalReceipt({ view, actions, busy, error, onCheckout, onCancel }: C
       <p className="audit-summary">{approval.auditSummary}</p>
       <ActionError message={error} />
       <div className="button-row">
-        {actions.has('execute_checkout') && <button className="button button-primary button-purchase" disabled={Boolean(busy)} onClick={onCheckout}>{busy === 'checkout' ? <><LoaderCircle className="spin" size={17} /> Revalidating…</> : <><CreditCard size={17} /> Execute checkout</>}</button>}
+        {actions.has('execute_checkout') && checkoutUrl && <a className="button button-primary button-purchase" href={checkoutUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={17} /> Continue to merchant checkout</a>}
+        {actions.has('execute_checkout') && !checkoutUrl && <p className="field-error">This offer has no verified merchant checkout page.</p>}
         <CancelButton show={actions.has('cancel')} busy={Boolean(busy)} onClick={onCancel} />
       </div>
     </section>
