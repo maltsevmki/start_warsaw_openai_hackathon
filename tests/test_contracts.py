@@ -3,6 +3,7 @@ from copy import deepcopy
 import pytest
 
 from app import schemas
+from app.domain.intent import ClassificationResult
 from app.modules import (
     ComparisonModule,
     ConsentAuditModule,
@@ -44,10 +45,57 @@ def test_intent_classifies_required_scenarios(profile, prompt, status):
 
 
 def test_intent_classifies_iphone_for_live_research(profile):
-    result = IntentGuardrailModule().classify("Buy iPhone 12 please", [], profile)
+    result = IntentGuardrailModule().classify("Buy iPhone 12 under 2000 PLN please", [], profile)
 
     assert result.status == "valid_request"
     assert result.constraints.product_category == "smartphone"
+
+
+def test_toothbrush_purchase_requires_budget_before_research(profile):
+    module = IntentGuardrailModule()
+
+    initial = module.classify("I want to buy a toothbrush", [], profile)
+    after_type = module.classify(
+        "I want to buy a toothbrush", ["Product category: electric"], profile
+    )
+    complete = module.classify(
+        "I want to buy a toothbrush",
+        ["Product category: electric", "Maximum budget (PLN): 150"],
+        profile,
+    )
+
+    assert initial.status == "need_clarification"
+    assert initial.question.expected_field == "budget_max"
+    assert initial.question.fields[0].name == "budget_max"
+    assert initial.question.fields[0].input_type == "number"
+    assert after_type.status == "need_clarification"
+    assert after_type.question.expected_field == "budget_max"
+    assert complete.status == "valid_request"
+    assert complete.constraints.budget_max.amount == 150
+
+
+def test_orchestrator_defensively_blocks_budgetless_valid_intent():
+    class BudgetlessIntent:
+        def classify(self, prompt, prior_messages, profile):
+            return ClassificationResult(
+                status="valid_request",
+                constraints=schemas.ShoppingConstraints(
+                    productCategory="monitor",
+                    query=prompt,
+                ),
+                summary="Looking for a monitor.",
+                source="openai",
+            )
+
+    view = WorkflowOrchestrator(
+        intent=BudgetlessIntent(),
+        catalog=TestCatalog(),
+    ).start_workflow("Buy a monitor")
+
+    assert view.workflow.state == "needs_clarification"
+    assert view.clarification.expected_field == "budget_max"
+    assert view.comparison is None
+    assert view.proposal is None
 
 
 def test_deterministic_guardrail_handles_localized_prescription_request(profile):
@@ -71,6 +119,45 @@ def test_catalog_and_comparison_choose_happy_monitor(profile):
     comparison = ComparisonModule().compare("wf_test", classification.constraints, profile, search.offers)
     assert comparison.best_offer_id == "offer_monitor_happy"
     assert comparison.recommendation == "proceed"
+
+
+def test_comparison_enforces_budget_and_never_invents_budget_target(profile):
+    catalog = TestCatalog()
+    offers = [offer for offer in catalog.offers if offer.category == "monitor"]
+    bounded = schemas.ShoppingConstraints(
+        productCategory="monitor",
+        query="Find a monitor under 900 PLN",
+        budgetMax={"amount": 900, "currency": "PLN"},
+    )
+    without_price = bounded.model_copy(update={"budget_max": None, "query": "Find a monitor"})
+
+    result = ComparisonModule().compare("wf_budget", bounded, profile, offers)
+    defensive = ComparisonModule().compare("wf_missing", without_price, profile, offers)
+
+    assert result.best_offer_id is not None
+    assert next(item for item in result.ranked_offers if item.offer_id == "offer_monitor_happy").disqualifiers == [
+        "Exceeds the maximum budget"
+    ]
+    assert all(
+        "Meets the budget target" not in item.reasons
+        for item in [*result.ranked_offers, *defensive.ranked_offers]
+    )
+    assert defensive.best_offer_id is None
+    assert defensive.recommendation == "stop"
+    assert defensive.missing_evidence == ["Maximum budget or lowest-price objective is required"]
+
+
+def test_cheapest_request_uses_lowest_eligible_offer_wording(profile):
+    classification = IntentGuardrailModule().classify(FAILURE_PROMPT, [], profile)
+    search = TestCatalog().search(classification.constraints, profile)
+
+    comparison = ComparisonModule().compare(
+        "wf_cheapest", classification.constraints, profile, search.offers
+    )
+
+    assert comparison.best_offer_id == "offer_hub_failure"
+    assert "Lowest-priced eligible offer" in comparison.ranked_offers[0].reasons
+    assert "Meets the budget target" not in comparison.ranked_offers[0].reasons
 
 
 def test_catalog_offers_transparent_headphone_alternatives(profile):
@@ -155,9 +242,15 @@ def test_rollback_restores_snapshot_and_preserves_abandoned_branch():
     assert initial.history.revisions[0].decision.kind == "clarification"
     assert initial.history.revisions[0].decision.title == initial.clarification.text
 
-    answered = orchestrator.add_user_message(
+    sized = orchestrator.add_user_message(
         initial.workflow.id,
         message="Size 42, black, comfortable for walking.",
+    )
+    assert sized.workflow.state == "needs_clarification"
+    assert sized.clarification.expected_field == "budget_max"
+    answered = orchestrator.add_user_message(
+        initial.workflow.id,
+        message="Maximum 500 PLN.",
     )
     abandoned_revision_id = answered.history.current_revision_id
     assert answered.workflow.state == "awaiting_approval"

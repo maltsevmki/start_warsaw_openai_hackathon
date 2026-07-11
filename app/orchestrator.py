@@ -535,6 +535,16 @@ class WorkflowOrchestrator:
     def _classify_and_continue(self, record: WorkflowRecord) -> None:
         profile = self.profile.get_profile()
         result = self.intent.classify(record.workflow.prompt, record.messages, profile)
+        if (
+            result.status == "valid_request"
+            and result.constraints
+            and IntentGuardrailModule.needs_budget(result.constraints)
+        ):
+            source = result.source
+            confidence = result.confidence
+            result = IntentGuardrailModule().budget_clarification_result(result.constraints)
+            result.source = source
+            result.confidence = confidence
         self._event(
             record,
             "prompt.classified",

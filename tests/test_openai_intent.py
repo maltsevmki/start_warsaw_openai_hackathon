@@ -87,6 +87,36 @@ def shoe_clarification_output():
     )
 
 
+def electric_toothbrush_output(
+    budget: float | None = None,
+    budget_evidence: str | None = None,
+) -> IntentAgentOutput:
+    return IntentAgentOutput(
+        status="valid_request",
+        product_category="electric toothbrush",
+        product_category_evidence="toothbrush",
+        budget_max_amount=budget,
+        budget_max_evidence=budget_evidence,
+        delivery_deadline=None,
+        delivery_deadline_evidence=None,
+        compatibility=[],
+        must_have=[sourced("electric", "electric")],
+        nice_to_have=[],
+        required_return_days=None,
+        required_return_days_evidence=None,
+        forbidden=[],
+        missing_fields=[],
+        question_text=None,
+        expected_field=None,
+        examples=[],
+        policy_code=None,
+        policy_message=None,
+        can_suggest_safer_alternative=False,
+        confidence=0.9,
+        extracted_summary="Looking for an electric toothbrush.",
+    )
+
+
 def test_openai_intent_agent_uses_structured_output():
     client = FakeOpenAI(output=valid_monitor_output())
     agent = OpenAIIntentAgent(api_key="", client=client)
@@ -189,6 +219,34 @@ def test_openai_intent_keeps_explicit_usb_c_and_macbook_compatibility():
 
     assert result.constraints.compatibility == ["USB-C", "MacBook"]
     assert result.constraints.must_have == ["USB-C"]
+
+
+def test_openai_intent_requires_budget_after_product_type_clarification():
+    profile = DemoProfileModule().get_profile()
+    missing_budget = OpenAIIntentAgent(
+        api_key="", client=FakeOpenAI(output=electric_toothbrush_output())
+    ).classify(
+        "I want to buy a toothbrush",
+        ["Product category: electric"],
+        profile,
+    )
+    with_budget = OpenAIIntentAgent(
+        api_key="",
+        client=FakeOpenAI(
+            output=electric_toothbrush_output(150, "Maximum 150 PLN")
+        ),
+    ).classify(
+        "I want to buy a toothbrush",
+        ["Product category: electric", "Maximum 150 PLN"],
+        profile,
+    )
+
+    assert missing_budget.status == "need_clarification"
+    assert missing_budget.question.expected_field == "budget_max"
+    assert [field.name for field in missing_budget.question.fields] == ["budget_max"]
+    assert missing_budget.question.fields[0].input_type == "number"
+    assert with_budget.status == "valid_request"
+    assert with_budget.constraints.budget_max.amount == 150
 
 
 def test_deterministic_guardrail_runs_before_openai():

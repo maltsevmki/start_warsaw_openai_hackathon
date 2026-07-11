@@ -73,9 +73,12 @@ Rules:
 - For every extracted scalar constraint, copy an exact supporting user quote into its matching *_evidence field; otherwise return the constraint and evidence as null.
 - For every compatibility, must_have, nice_to_have, or forbidden item, copy an exact supporting user quote into evidence. Do not use paraphrased or inferred evidence.
 - Ask one concise clarification when a required fact is missing. Shoes and clothing need a size.
+- A purchase request is incomplete until the user provides either a maximum budget or an explicit lowest-price objective such as "cheapest" or "lowest price".
+- When the category is known but that price information is missing, return need_clarification for budget_max and ask for the maximum amount in PLN.
+- When both the product category and price information are missing, return need_clarification for product_category_and_budget.
 - For need_clarification, identify the missing field, provide one direct question, and include 1-3 short example answers.
 - Use shoe_size and clothing_size as the expected_field names for those size questions.
-- Vague requests need a product category and usually a budget.
+- Vague requests need a product category and a maximum budget unless they explicitly request the lowest-priced option.
 - Mark illegal, unsafe, restricted, or professionally controlled purchases as policy_violation.
 - Never claim that checkout is authorized. Explicit approval is always handled later by the application.
 - Confidence must be between 0 and 1.
@@ -221,7 +224,33 @@ class OpenAIIntentAgent:
             result.confidence = confidence
             result.source = "openai"
             return result
-        if output.status == "need_clarification" or not product_category:
+        if not product_category:
+            if self.deterministic.needs_budget(constraints):
+                result = self.deterministic.clarification_result(
+                    constraints,
+                    "product_category_and_budget",
+                    "What kind of product would you like, and what is your maximum budget?",
+                    ["Electric toothbrush under 150 PLN", "Headphones under 300 PLN"],
+                )
+            else:
+                expected_field = output.expected_field or (
+                    output.missing_fields[0] if output.missing_fields else "product_category"
+                )
+                result = self.deterministic.clarification_result(
+                    constraints,
+                    expected_field,
+                    output.question_text or "What kind of product would you like?",
+                    output.examples,
+                )
+            result.confidence = confidence
+            result.source = "openai"
+            return result
+        if self.deterministic.needs_budget(constraints):
+            result = self.deterministic.budget_clarification_result(constraints)
+            result.confidence = confidence
+            result.source = "openai"
+            return result
+        if output.status == "need_clarification":
             expected_field = output.expected_field or (
                 output.missing_fields[0] if output.missing_fields else "product_category"
             )

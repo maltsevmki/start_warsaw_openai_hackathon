@@ -17,6 +17,24 @@ def setup_function():
     orchestrator.reset()
 
 
+def answer_shoe_workflow_with_budget(view: dict) -> dict:
+    workflow_id = view["workflow"]["id"]
+    sized = client.post(
+        f"/api/workflows/{workflow_id}/messages",
+        json={"message": "Size 42, black, comfortable for walking."},
+    )
+    assert sized.status_code == 200
+    budget_view = sized.json()
+    assert budget_view["workflow"]["state"] == "needs_clarification"
+    assert budget_view["clarification"]["expectedField"] == "budget_max"
+    budgeted = client.post(
+        f"/api/workflows/{workflow_id}/messages",
+        json={"message": "Maximum 500 PLN."},
+    )
+    assert budgeted.status_code == 200
+    return budgeted.json()
+
+
 def test_all_happy_path_http_endpoints():
     created = client.post("/api/workflows", json={"prompt": HAPPY_PROMPT})
     assert created.status_code == 201
@@ -68,12 +86,8 @@ def test_clarification_and_alternative_http_endpoints():
         "color",
         "intended_use",
     ]
-    replied = client.post(
-        f"/api/workflows/{clarification['workflow']['id']}/messages",
-        json={"message": "Size 42, black, comfortable for walking."},
-    )
-    assert replied.status_code == 200
-    assert replied.json()["workflow"]["state"] == "awaiting_approval"
+    replied = answer_shoe_workflow_with_budget(clarification)
+    assert replied["workflow"]["state"] == "awaiting_approval"
 
     alternative = client.post(
         "/api/workflows",
@@ -85,6 +99,34 @@ def test_clarification_and_alternative_http_endpoints():
     )
     assert accepted.status_code == 200
     assert accepted.json()["proposal"]["offerId"] == "offer_headphones_tomorrow"
+
+
+def test_toothbrush_workflow_cannot_research_without_maximum_budget():
+    created = client.post(
+        "/api/workflows", json={"prompt": "I want to buy a toothbrush"}
+    ).json()
+    workflow_id = created["workflow"]["id"]
+
+    assert created["workflow"]["state"] == "needs_clarification"
+    assert created["clarification"]["expectedField"] == "budget_max"
+    assert "comparison" not in created
+    assert "proposal" not in created
+
+    type_only = client.post(
+        f"/api/workflows/{workflow_id}/messages",
+        json={"message": "Electric"},
+    ).json()
+    assert type_only["workflow"]["state"] == "needs_clarification"
+    assert type_only["clarification"]["expectedField"] == "budget_max"
+    assert "comparison" not in type_only
+    assert "proposal" not in type_only
+
+    budgeted = client.post(
+        f"/api/workflows/{workflow_id}/messages",
+        json={"message": "Maximum 150 PLN"},
+    ).json()
+    assert budgeted["constraints"]["budgetMax"]["amount"] == 150
+    assert budgeted["workflow"]["state"] != "needs_clarification"
 
 
 def test_structured_clarification_answers_are_bound_to_active_question():
@@ -115,10 +157,22 @@ def test_structured_clarification_answers_are_bound_to_active_question():
     )
     assert replied.status_code == 200
     body = replied.json()
-    assert body["workflow"]["state"] == "awaiting_approval"
+    assert body["workflow"]["state"] == "needs_clarification"
+    assert body["clarification"]["expectedField"] == "budget_max"
     message_event = next(event for event in body["events"] if event["type"] == "message.received")
     assert message_event["data"]["questionId"] == question_id
     assert message_event["data"]["answerFields"] == ["shoe_size", "color", "intended_use"]
+    budget_question = body["clarification"]
+    budgeted = client.post(
+        f"/api/workflows/{workflow_id}/messages",
+        json={
+            "questionId": budget_question["id"],
+            "answers": [{"field": "budget_max", "value": "500"}],
+        },
+    )
+    assert budgeted.status_code == 200
+    assert budgeted.json()["workflow"]["state"] == "awaiting_approval"
+    assert budgeted.json()["constraints"]["budgetMax"]["amount"] == 500
 
 
 def test_guardrail_reject_and_cancel_are_usable():
@@ -183,10 +237,7 @@ def test_user_can_select_another_top_offer_before_approval():
     clarification = client.post(
         "/api/workflows", json={"prompt": "Buy me shoes for tomorrow."}
     ).json()
-    view = client.post(
-        f"/api/workflows/{clarification['workflow']['id']}/messages",
-        json={"message": "Size 42, black, comfortable for walking."},
-    ).json()
+    view = answer_shoe_workflow_with_budget(clarification)
     workflow_id = view["workflow"]["id"]
     current_offer_id = view["proposal"]["offerId"]
     alternate = next(
