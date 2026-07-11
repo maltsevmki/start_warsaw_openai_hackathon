@@ -5,3 +5,4 @@ pydantic==2.10.4
 eval-type-backport==0.2.2
 openai==2.45.0
 python-dotenv==1.2.1
+stripe>=11.0

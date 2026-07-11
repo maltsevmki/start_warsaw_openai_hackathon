@@ -6,10 +6,14 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app import schemas
 from app.domain.intent import ClassificationResult
+
+if TYPE_CHECKING:
+    from app.payments import PaymentGateway
 
 
 def utcnow() -> datetime:
@@ -530,8 +534,13 @@ class CheckoutResult:
 
 
 class MockCheckoutModule:
-    def __init__(self, catalog: MockCatalogModule):
+    def __init__(self, catalog: MockCatalogModule, gateway: "PaymentGateway | None" = None):
         self.catalog = catalog
+        if gateway is None:
+            from app.payments import default_gateway
+
+            gateway = default_gateway()
+        self.gateway = gateway
 
     def execute(
         self,
@@ -558,6 +567,17 @@ class MockCheckoutModule:
         if revalidated.offer and revalidated.offer.demo_behavior == "payment_failed":
             return self._failure(attempt_id, workflow_id, proposal.id, approval, "payment_failed")
 
+        payment = self.gateway.authorize(
+            amount=proposal.total.amount,
+            currency=proposal.total.currency,
+            description=f"{proposal.title} ({proposal.id})",
+            idempotency_key=f"{workflow_id}:{proposal.id}:{approval.id}",
+        )
+        if payment.status != "succeeded":
+            return self._failure(
+                attempt_id, workflow_id, proposal.id, approval, payment.failure_reason or "payment_failed"
+            )
+
         merchant_ref = f"DEMO-{uuid4().hex[:8].upper()}"
         attempt = schemas.CheckoutAttempt(
             id=attempt_id,
@@ -565,7 +585,7 @@ class MockCheckoutModule:
             proposalId=proposal.id,
             approvalId=approval.id,
             status="succeeded",
-            paymentAuthorizationId=new_id("pay"),
+            paymentAuthorizationId=payment.authorization_id or new_id("pay"),
             merchantOrderRef=merchant_ref,
             receipt={"receiptId": new_id("receipt"), "total": proposal.total, "paidAt": utcnow()},
         )
