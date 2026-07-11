@@ -31,14 +31,12 @@ export default function ThemeToggle() {
   return (
     <button
       type="button"
-      className="theme-toggle"
+      className="theme-icon-button"
       onClick={() => setTheme(mode === 'light' ? 'dark' : 'light')}
       aria-label={`Switch to ${mode === 'light' ? 'dark' : 'light'} theme`}
       title={`Switch to ${mode === 'light' ? 'dark' : 'light'} theme`}
     >
-      <span className="theme-toggle-icon">{mode === 'light' ? <Sun size={16} /> : <Moon size={16} />}</span>
-      <span className="theme-toggle-copy"><small>Appearance</small><strong>{mode === 'light' ? 'Light' : 'Dark'}</strong></span>
-      <span className="theme-toggle-track" aria-hidden="true"><span /></span>
+      {mode === 'light' ? <Moon size={18} aria-hidden="true" /> : <Sun size={18} aria-hidden="true" />}
     </button>
   )
 }

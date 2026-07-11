@@ -8,5 +8,11 @@ venv/
 .idea/
 .pytest_cache/
 tests/
+node_modules/
+dist/
+.expo/
+mobile/.env.local
+.vscode/
+.claude/
 !tests/
 !tests/fakes.py
