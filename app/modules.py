@@ -83,44 +83,27 @@ class IntentGuardrailModule:
         lower = combined.lower()
         constraints = self._extract_constraints(combined)
 
-        if "prescription medicine" in lower:
-            return ClassificationResult(
-                status="policy_violation",
-                confidence=0.99,
-                block=schemas.PolicyBlock(
-                    code="requires_professional_verification",
-                    message="Prescription medicine requires verification by a licensed clinician or pharmacist and cannot be purchased autonomously.",
-                    canSuggestSaferAlternative=True,
-                ),
-            )
-        if "weapon" in lower or "illegal" in lower:
-            return ClassificationResult(
-                status="policy_violation",
-                confidence=0.99,
-                block=schemas.PolicyBlock(
-                    code="unsafe_or_illegal",
-                    message="This request involves restricted, unsafe, or illegal goods and cannot be completed.",
-                    canSuggestSaferAlternative=False,
-                ),
-            )
+        guardrail = self.check_guardrails(combined)
+        if guardrail:
+            return guardrail
 
         category = constraints.product_category
         if category == "shoes" and not re.search(r"\b(?:size\s*)?(3[5-9]|4[0-9]|5[0-2])\b", lower):
-            return self._clarification(
+            return self.clarification_result(
                 constraints,
                 "shoe_size",
                 "What shoe size should I look for? You can also add a color or intended use.",
                 ["Size 42, black", "EU 39, for running"],
             )
         if category == "clothing" and not re.search(r"\b(?:size\s*)?(xs|s|m|l|xl|xxl|\d{2})\b", lower):
-            return self._clarification(
+            return self.clarification_result(
                 constraints,
                 "clothing_size",
                 "What clothing size should I use?",
                 ["Size M", "EU 40"],
             )
         if category is None:
-            return self._clarification(
+            return self.clarification_result(
                 constraints,
                 "product_category_and_budget",
                 "What kind of product would you like, and what is your maximum budget?",
@@ -139,7 +122,42 @@ class IntentGuardrailModule:
             confidence=0.97,
         )
 
-    def _clarification(
+    def check_guardrails(self, text: str) -> ClassificationResult | None:
+        """Apply only hard application policy checks, without classifying safe intent."""
+        lower = text.lower()
+        if any(
+            phrase in lower
+            for phrase in (
+                "prescription medicine",
+                "prescription drug",
+                "controlled substance",
+                "lek na receptę",
+                "leki na receptę",
+            )
+        ):
+            return ClassificationResult(
+                status="policy_violation",
+                confidence=0.99,
+                block=schemas.PolicyBlock(
+                    code="requires_professional_verification",
+                    message="Prescription medicine requires verification by a licensed clinician or pharmacist and cannot be purchased autonomously.",
+                    canSuggestSaferAlternative=True,
+                ),
+            )
+        if re.search(r"\b(?:weapon|weapons|firearm|firearms|gun|guns|illegal)\b", lower):
+            return ClassificationResult(
+                status="policy_violation",
+                confidence=0.99,
+                block=schemas.PolicyBlock(
+                    code="unsafe_or_illegal",
+                    message="This request involves restricted, unsafe, or illegal goods and cannot be completed.",
+                    canSuggestSaferAlternative=False,
+                ),
+            )
+
+        return None
+
+    def clarification_result(
         self,
         constraints: schemas.ShoppingConstraints,
         expected_field: str,
@@ -155,8 +173,67 @@ class IntentGuardrailModule:
                 text=text,
                 expectedField=expected_field,
                 examples=examples,
+                fields=self._clarification_fields(expected_field),
             ),
         )
+
+    def _clarification_fields(self, expected_field: str) -> list[schemas.ClarificationField]:
+        if expected_field == "shoe_size":
+            return [
+                schemas.ClarificationField(
+                    name="shoe_size",
+                    label="EU shoe size",
+                    inputType="number",
+                    placeholder="42",
+                ),
+                schemas.ClarificationField(
+                    name="color",
+                    label="Preferred color",
+                    inputType="text",
+                    required=False,
+                    placeholder="Black",
+                ),
+                schemas.ClarificationField(
+                    name="intended_use",
+                    label="Intended use",
+                    inputType="text",
+                    required=False,
+                    placeholder="Comfortable walking",
+                ),
+            ]
+        if expected_field == "clothing_size":
+            return [
+                schemas.ClarificationField(
+                    name="clothing_size",
+                    label="Clothing size",
+                    inputType="single_select",
+                    options=["XS", "S", "M", "L", "XL", "XXL"],
+                    allowCustom=True,
+                    placeholder="M or EU 40",
+                )
+            ]
+        if expected_field == "product_category_and_budget":
+            return [
+                schemas.ClarificationField(
+                    name="product_category",
+                    label="Product",
+                    inputType="text",
+                    placeholder="Headphones",
+                ),
+                schemas.ClarificationField(
+                    name="budget_max",
+                    label="Maximum budget (PLN)",
+                    inputType="number",
+                    placeholder="300",
+                ),
+            ]
+        return [
+            schemas.ClarificationField(
+                name=expected_field,
+                label=expected_field.replace("_", " ").capitalize(),
+                inputType="text",
+            )
+        ]
 
     def _extract_constraints(self, text: str) -> schemas.ShoppingConstraints:
         lower = text.lower()

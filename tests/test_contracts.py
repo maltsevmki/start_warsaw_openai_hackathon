@@ -43,6 +43,19 @@ def test_intent_classifies_required_scenarios(profile, prompt, status):
     assert IntentGuardrailModule().classify(prompt, [], profile).status == status
 
 
+def test_deterministic_guardrail_handles_localized_prescription_request(profile):
+    result = IntentGuardrailModule().classify("Kup mi leki na receptę", [], profile)
+    assert result.status == "policy_violation"
+    assert result.block.code == "requires_professional_verification"
+
+
+def test_shoe_clarification_exposes_renderable_form(profile):
+    result = IntentGuardrailModule().classify(CLARIFICATION_PROMPT, [], profile)
+    assert result.question.expected_field == "shoe_size"
+    assert result.question.fields[0].name == "shoe_size"
+    assert result.question.fields[0].required is True
+
+
 def test_catalog_and_comparison_choose_happy_monitor(profile):
     classification = IntentGuardrailModule().classify(HAPPY_PROMPT, [], profile)
     search = MockCatalogModule().search(classification.constraints, profile)

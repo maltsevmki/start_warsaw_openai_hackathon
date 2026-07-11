@@ -43,7 +43,7 @@ body { margin: 0; color: var(--ink); background: var(--cream); font-family: var(
 body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(rgba(23,107,77,.045) 1px, transparent 1px); background-size: 22px 22px; mask-image: linear-gradient(to bottom, black, transparent 60%); }
 button, input, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 35%, transparent); outline-offset: 3px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 35%, transparent); outline-offset: 3px; }
 a { color: inherit; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .page-width { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
@@ -178,8 +178,12 @@ a { color: inherit; }
 .decision-icon.success { color: var(--green); background: var(--green-pale); }
 .decision-lead { max-width: 660px; margin: 12px 0 20px; color: var(--ink-soft); font-size: 13px; line-height: 1.65; }
 .decision-card label:not(.alternative-option) { display: block; margin: 15px 0 6px; color: var(--ink-soft); font-size: 10px; font-weight: 700; }
-.decision-card input:not([type=radio]), .decision-card textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 10px; padding: 11px 13px; color: var(--ink); background: var(--paper); font-size: 12px; }
+.decision-card input:not([type=radio]), .decision-card select, .decision-card textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 10px; padding: 11px 13px; color: var(--ink); background: var(--paper); font-size: 12px; }
 .decision-card textarea { min-height: 86px; resize: vertical; }
+.clarification-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.clarification-field:first-child, .clarification-examples { grid-column: 1 / -1; }
+.clarification-field label span { color: var(--ink-faint); font-weight: 500; }
+.clarification-examples { margin: 10px 0 0; color: var(--ink-faint); font-size: 10px; }
 .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; }
 .example-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .example-chips button { border: 1px solid var(--line); border-radius: 99px; padding: 7px 10px; color: var(--green); background: var(--paper); font-size: 10px; cursor: pointer; }
@@ -299,4 +303,4 @@ a { color: inherit; }
   .alternative-option { grid-template-columns: auto 1fr; }.change-chip { grid-column: 2; justify-self: start; }
   .offer-card { grid-template-columns: 28px 1fr; }.offer-score { grid-column: 2; align-items: flex-start; flex-direction: row; }
 }
-@media (max-width: 430px) { .scenario-grid { grid-template-columns: 1fr; }.scenario-card { min-height: 205px; }.scenario-icon { margin-bottom: 20px; }.button-row .button { width: 100%; }.proposal-facts, .receipt-grid, .constraint-grid { grid-template-columns: 1fr; }.proposal-facts > div { border-right: 0; border-bottom: 1px solid var(--line); } }
+@media (max-width: 430px) { .scenario-grid { grid-template-columns: 1fr; }.scenario-card { min-height: 205px; }.scenario-icon { margin-bottom: 20px; }.button-row .button { width: 100%; }.proposal-facts, .receipt-grid, .constraint-grid, .clarification-form { grid-template-columns: 1fr; }.proposal-facts > div { border-right: 0; border-bottom: 1px solid var(--line); } }

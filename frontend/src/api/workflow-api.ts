@@ -2,6 +2,7 @@ import { request } from './client'
 import type {
   DemoScenarios,
   DomainEvent,
+  ClarificationReply,
   OrderStatus,
   WorkflowView,
 } from './types'
@@ -23,10 +24,10 @@ export const startWorkflow = (prompt: string) =>
 export const getWorkflow = (workflowId: string, signal?: AbortSignal) =>
   request<WorkflowView>(`/api/workflows/${workflowId}`, { signal })
 
-export const addWorkflowMessage = (workflowId: string, message: string) =>
+export const addWorkflowMessage = (workflowId: string, reply: ClarificationReply) =>
   request<WorkflowView>(`/api/workflows/${workflowId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(reply),
   })
 
 export const respondToAlternative = (

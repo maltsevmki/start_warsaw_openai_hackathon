@@ -18,13 +18,13 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { formatDate, formatMoney, titleCase } from '../../api/format'
-import type { OrderStatus, WorkflowAction, WorkflowView } from '../../api/types'
+import type { ClarificationReply, OrderStatus, WorkflowAction, WorkflowView } from '../../api/types'
 
 interface DecisionPanelProps {
   view: WorkflowView
   busy: string | null
   error: string | null
-  onClarify: (message: string) => void
+  onClarify: (reply: ClarificationReply) => void
   onAlternative: (accepted: boolean, alternativeId?: string) => void
   onApprove: () => void
   onReject: (reason?: string) => void
@@ -66,7 +66,7 @@ export function DecisionPanel(props: DecisionPanelProps) {
   const actions = new Set<WorkflowAction>(view.workflow.availableActions)
   const common = { actions, ...props }
 
-  if (view.workflow.state === 'needs_clarification' && view.clarification) return <ClarificationCard {...common} />
+  if (view.workflow.state === 'needs_clarification' && view.clarification) return <ClarificationCard key={view.clarification.id} {...common} />
   if (view.workflow.state === 'blocked_by_policy') return <GuardrailCard view={view} />
   if (view.workflow.state === 'no_exact_match') return <NoMatchCard {...common} />
   if (view.workflow.state === 'awaiting_alternative_acceptance') return <AlternativePicker {...common} />
@@ -82,12 +82,24 @@ type CommonProps = DecisionPanelProps & { actions: Set<WorkflowAction> }
 
 function ClarificationCard({ view, actions, busy, error, onClarify, onCancel }: CommonProps) {
   const [message, setMessage] = useState('')
+  const [values, setValues] = useState<Record<string, string>>({})
   const [fieldError, setFieldError] = useState('')
   const question = view.clarification!
+  const fields = question.fields ?? []
   const submit = () => {
+    if (fields.length) {
+      const missing = fields.find((field) => field.required && !values[field.name]?.trim())
+      if (missing) return setFieldError(`Add ${missing.label.toLowerCase()} before continuing.`)
+      const answers = fields
+        .filter((field) => values[field.name]?.trim())
+        .map((field) => ({ field: field.name, value: values[field.name].trim() }))
+      setFieldError('')
+      onClarify({ questionId: question.id, answers })
+      return
+    }
     if (!message.trim()) return setFieldError('Add a short answer before continuing.')
     setFieldError('')
-    onClarify(message.trim())
+    onClarify({ message: message.trim() })
   }
   return (
     <section className="decision-card decision-question">
@@ -95,11 +107,46 @@ function ClarificationCard({ view, actions, busy, error, onClarify, onCancel }: 
       <p className="eyebrow">One detail needed</p>
       <h2>{question.text}</h2>
       <p className="decision-lead">The agent has paused research until you clarify this constraint.</p>
-      <div className="example-chips">
-        {question.examples.map((example) => <button key={example} type="button" onClick={() => setMessage(example)}>{example}</button>)}
-      </div>
-      <label htmlFor="clarification">Your answer</label>
-      <textarea id="clarification" value={message} onChange={(event) => setMessage(event.target.value)} aria-describedby={fieldError ? 'clarification-error' : undefined} placeholder="Type your answer…" />
+      {fields.length ? (
+        <div className="clarification-form">
+          {fields.map((field) => {
+            const inputId = `clarification-${field.name}`
+            const listId = `${inputId}-options`
+            return (
+              <div className="clarification-field" key={field.name}>
+                <label htmlFor={inputId}>{field.label}{!field.required && <span> Optional</span>}</label>
+                {field.inputType === 'single_select' && !field.allowCustom ? (
+                  <select id={inputId} value={values[field.name] ?? ''} onChange={(event) => { setValues({ ...values, [field.name]: event.target.value }); setFieldError('') }}>
+                    <option value="">Choose…</option>
+                    {(field.options ?? []).map((option) => <option key={option}>{option}</option>)}
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      id={inputId}
+                      type={field.inputType === 'number' ? 'number' : 'text'}
+                      list={field.options?.length ? listId : undefined}
+                      value={values[field.name] ?? ''}
+                      onChange={(event) => { setValues({ ...values, [field.name]: event.target.value }); setFieldError('') }}
+                      placeholder={field.placeholder ?? undefined}
+                    />
+                    {field.options?.length ? <datalist id={listId}>{field.options.map((option) => <option key={option} value={option} />)}</datalist> : null}
+                  </>
+                )}
+              </div>
+            )
+          })}
+          {question.examples.length ? <p className="clarification-examples">For example: {question.examples.join(' · ')}</p> : null}
+        </div>
+      ) : (
+        <>
+          <div className="example-chips">
+            {question.examples.map((example) => <button key={example} type="button" onClick={() => setMessage(example)}>{example}</button>)}
+          </div>
+          <label htmlFor="clarification">Your answer</label>
+          <textarea id="clarification" value={message} onChange={(event) => setMessage(event.target.value)} aria-describedby={fieldError ? 'clarification-error' : undefined} placeholder="Type your answer…" />
+        </>
+      )}
       {fieldError && <p className="field-error" id="clarification-error">{fieldError}</p>}
       <ActionError message={error} />
       <div className="button-row">

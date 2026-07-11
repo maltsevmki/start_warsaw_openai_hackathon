@@ -98,13 +98,78 @@ class WorkflowOrchestrator:
     def get_events(self, workflow_id: str) -> list[schemas.DomainEvent]:
         return [event.model_copy(deep=True) for event in self._record(workflow_id).events]
 
-    def add_user_message(self, workflow_id: str, message: str) -> schemas.WorkflowView:
+    def add_user_message(
+        self,
+        workflow_id: str,
+        message: str | None = None,
+        question_id: str | None = None,
+        answers: list[schemas.ClarificationAnswer] | None = None,
+    ) -> schemas.WorkflowView:
         record = self._record(workflow_id)
         self._require_state(record, "needs_clarification")
+        if not record.clarification:
+            raise DomainError("Workflow has no active clarification question")
+        if question_id and question_id != record.clarification.id:
+            raise DomainError("Clarification question is stale; refresh the workflow before replying")
+        answer_fields: list[str] = []
+        if answers is not None:
+            message, answer_fields = self._format_clarification_answers(record.clarification, answers)
+        if not message or not message.strip():
+            raise DomainError("Clarification answer cannot be empty", 422)
+        message = message.strip()
         record.messages.append(message)
-        self._event(record, "message.received", "user", "orchestrator", f"User replied: {message}", {})
+        self._event(
+            record,
+            "message.received",
+            "user",
+            "orchestrator",
+            f"User replied: {message}",
+            {
+                "questionId": record.clarification.id,
+                "answerFields": answer_fields,
+            },
+        )
         self._classify_and_continue(record)
         return self._view(record)
+
+    def _format_clarification_answers(
+        self,
+        question: schemas.ClarificationQuestion,
+        answers: list[schemas.ClarificationAnswer],
+    ) -> tuple[str, list[str]]:
+        fields = {field.name: field for field in question.fields}
+        provided: dict[str, str] = {}
+        for answer in answers:
+            if answer.field in provided:
+                raise DomainError(f"Duplicate clarification field: {answer.field}", 422)
+            field = fields.get(answer.field)
+            if not field:
+                raise DomainError(f"Unknown clarification field: {answer.field}", 422)
+            value = answer.value.strip()
+            if not value:
+                raise DomainError(f"Clarification field '{answer.field}' cannot be empty", 422)
+            if field.input_type == "number":
+                try:
+                    float(value.replace(",", "."))
+                except ValueError as exc:
+                    raise DomainError(
+                        f"Clarification field '{answer.field}' must be a number", 422
+                    ) from exc
+            if field.input_type == "single_select" and not field.allow_custom:
+                if value not in field.options:
+                    raise DomainError(
+                        f"Clarification field '{answer.field}' must use one of its options", 422
+                    )
+            provided[answer.field] = value
+
+        missing = [field.name for field in question.fields if field.required and field.name not in provided]
+        if missing:
+            raise DomainError(f"Missing required clarification fields: {', '.join(missing)}", 422)
+
+        rendered = ", ".join(
+            f"{fields[name].label}: {value}" for name, value in provided.items()
+        )
+        return rendered, list(provided)
 
     def accept_alternative(
         self, workflow_id: str, accepted: bool, alternative_id: str | None
@@ -335,10 +400,18 @@ class WorkflowOrchestrator:
             "module",
             "intent",
             f"Prompt classified as {result.status.replace('_', ' ')}.",
-            {"status": result.status, "confidence": result.confidence},
+            {
+                "status": result.status,
+                "confidence": result.confidence,
+                "source": result.source,
+                "productCategory": (
+                    result.constraints.product_category if result.constraints else None
+                ),
+            },
         )
         record.constraints = result.constraints
         if result.status == "policy_violation":
+            record.clarification = None
             record.guardrail = result.block
             self._event(
                 record,
@@ -351,6 +424,7 @@ class WorkflowOrchestrator:
             self._transition(record, "blocked_by_policy", "Request blocked by the safety policy.")
             return
         if result.status == "need_clarification":
+            record.guardrail = None
             record.clarification = result.question
             self._event(
                 record,
@@ -358,11 +432,20 @@ class WorkflowOrchestrator:
                 "module",
                 "intent",
                 result.question.text if result.question else "More information is required.",
-                {"expectedField": result.question.expected_field if result.question else None},
+                {
+                    "questionId": result.question.id if result.question else None,
+                    "expectedField": result.question.expected_field if result.question else None,
+                    "fields": (
+                        [field.name for field in result.question.fields]
+                        if result.question
+                        else []
+                    ),
+                },
             )
             self._transition(record, "needs_clarification", "I need one detail before I can search.")
             return
         record.clarification = None
+        record.guardrail = None
         record.workflow.summary = result.summary or "Request understood."
         self._research_and_continue(record)
 

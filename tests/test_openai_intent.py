@@ -52,6 +52,29 @@ def valid_monitor_output():
     )
 
 
+def shoe_clarification_output():
+    return IntentAgentOutput(
+        status="need_clarification",
+        product_category="shoes",
+        budget_max_amount=None,
+        delivery_deadline="tomorrow",
+        compatibility=[],
+        must_have=[],
+        nice_to_have=[],
+        required_return_days=None,
+        forbidden=[],
+        missing_fields=["shoe_size"],
+        question_text="What EU shoe size should I search for?",
+        expected_field="size",
+        examples=["Size 42, black"],
+        policy_code=None,
+        policy_message=None,
+        can_suggest_safer_alternative=False,
+        confidence=0.94,
+        extracted_summary=None,
+    )
+
+
 def test_openai_intent_agent_uses_structured_output():
     client = FakeOpenAI(output=valid_monitor_output())
     agent = OpenAIIntentAgent(api_key="", client=client)
@@ -78,6 +101,27 @@ def test_deterministic_guardrail_runs_before_openai():
     assert client.responses.calls == []
 
 
+def test_safe_incomplete_request_uses_openai_and_returns_question_form():
+    client = FakeOpenAI(output=shoe_clarification_output())
+    agent = OpenAIIntentAgent(api_key="", client=client)
+
+    result = agent.classify(
+        "Buy me shoes for tomorrow.",
+        [],
+        DemoProfileModule().get_profile(),
+    )
+
+    assert len(client.responses.calls) == 1
+    assert result.status == "need_clarification"
+    assert result.source == "openai"
+    assert [field.name for field in result.question.fields] == [
+        "shoe_size",
+        "color",
+        "intended_use",
+    ]
+    assert result.question.fields[0].input_type == "number"
+
+
 def test_openai_failure_falls_back_to_offline_intent():
     client = FakeOpenAI(error=ValueError("invalid structured result"))
     agent = OpenAIIntentAgent(api_key="", client=client, fallback_to_mock=True)
@@ -85,6 +129,7 @@ def test_openai_failure_falls_back_to_offline_intent():
     result = agent.classify(HAPPY_PROMPT, [], DemoProfileModule().get_profile())
 
     assert result.status == "valid_request"
+    assert result.source == "fallback"
     assert result.constraints.product_category == "monitor"
 
 

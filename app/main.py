@@ -94,7 +94,12 @@ def get_workflow(workflow_id: str):
     response_model_exclude_none=True,
 )
 def add_message(workflow_id: str, body: schemas.AddMessageRequest):
-    return orchestrator.add_user_message(workflow_id, body.message)
+    return orchestrator.add_user_message(
+        workflow_id,
+        message=body.message,
+        question_id=body.question_id,
+        answers=body.answers,
+    )
 
 
 @app.post(

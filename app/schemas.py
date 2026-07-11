@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 Currency = Literal["PLN"]
@@ -91,11 +91,27 @@ class DemoUserProfile(APIModel):
     payment_method: PaymentMethod = Field(alias="paymentMethod")
 
 
+class ClarificationField(APIModel):
+    name: str
+    label: str
+    input_type: Literal["text", "number", "single_select"] = Field(alias="inputType")
+    required: bool = True
+    placeholder: str | None = None
+    options: list[str] = Field(default_factory=list)
+    allow_custom: bool = Field(default=True, alias="allowCustom")
+
+
 class ClarificationQuestion(APIModel):
     id: str
     text: str
     expected_field: str = Field(alias="expectedField")
     examples: list[str]
+    fields: list[ClarificationField] = Field(default_factory=list)
+
+
+class ClarificationAnswer(APIModel):
+    field: str = Field(min_length=1, max_length=100)
+    value: str = Field(min_length=1, max_length=500)
 
 
 class PolicyBlock(APIModel):
@@ -324,7 +340,17 @@ class StartWorkflowRequest(APIModel):
 
 
 class AddMessageRequest(APIModel):
-    message: str = Field(min_length=1, max_length=1000)
+    message: str | None = Field(default=None, min_length=1, max_length=1000)
+    question_id: str | None = Field(default=None, alias="questionId")
+    answers: list[ClarificationAnswer] | None = Field(default=None, min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def require_one_answer_shape(self):
+        if (self.message is None) == (self.answers is None):
+            raise ValueError("Provide exactly one of message or answers")
+        if self.answers is not None and self.question_id is None:
+            raise ValueError("questionId is required with structured answers")
+        return self
 
 
 class AcceptAlternativeRequest(APIModel):

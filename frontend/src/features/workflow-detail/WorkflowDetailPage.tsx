@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ApiError } from '../../api/client'
 import { workflowKeys } from '../../api/query-keys'
-import type { OrderStatus, WorkflowView } from '../../api/types'
+import type { ClarificationReply, OrderStatus, WorkflowView } from '../../api/types'
 import {
   addWorkflowMessage,
   approveProposal,
@@ -68,7 +68,7 @@ export function WorkflowDetailPage({
               view={view}
               busy={busy}
               error={message}
-              onClarify={(reply) => run('clarify', () => addWorkflowMessage(workflowId, reply))}
+              onClarify={(reply: ClarificationReply) => run('clarify', () => addWorkflowMessage(workflowId, reply))}
               onAlternative={(accepted, alternativeId) => run('alternative', () => respondToAlternative(workflowId, { accepted, ...(alternativeId ? { alternativeId } : {}) }))}
               onApprove={() => {
                 if (!view.proposal) return

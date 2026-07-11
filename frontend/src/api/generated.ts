@@ -274,7 +274,11 @@ export interface components {
         /** AddMessageRequest */
         AddMessageRequest: {
             /** Message */
-            message: string;
+            message?: string | null;
+            /** Questionid */
+            questionId?: string | null;
+            /** Answers */
+            answers?: components["schemas"]["ClarificationAnswer"][] | null;
         };
         /** Alternative */
         Alternative: {
@@ -412,6 +416,39 @@ export interface components {
             /** Approvalid */
             approvalId: string;
         };
+        /** ClarificationAnswer */
+        ClarificationAnswer: {
+            /** Field */
+            field: string;
+            /** Value */
+            value: string;
+        };
+        /** ClarificationField */
+        ClarificationField: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /**
+             * Inputtype
+             * @enum {string}
+             */
+            inputType: "text" | "number" | "single_select";
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /** Placeholder */
+            placeholder?: string | null;
+            /** Options */
+            options?: string[];
+            /**
+             * Allowcustom
+             * @default true
+             */
+            allowCustom: boolean;
+        };
         /** ClarificationQuestion */
         ClarificationQuestion: {
             /** Id */
@@ -422,6 +459,8 @@ export interface components {
             expectedField: string;
             /** Examples */
             examples: string[];
+            /** Fields */
+            fields?: components["schemas"]["ClarificationField"][];
         };
         /** ComparisonResult */
         ComparisonResult: {
