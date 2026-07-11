@@ -303,12 +303,19 @@ class MockCatalogModule:
         settings: Settings | None = None,
         research_agent: CatalogModule | None = None,
     ):
-        path = fixture_path or Path(__file__).parent / "fixtures" / "catalog.json"
-        raw = json.loads(path.read_text())
-        self.offers = [schemas.Offer.model_validate(item) for group in raw.values() for item in group]
-        self.by_id = {offer.id: offer for offer in self.offers}
+        self.offers: list[schemas.Offer] = []
+        self.by_id: dict[str, schemas.Offer] = {}
         self._research_agent = research_agent
-        if self._research_agent is None:
+        # The fixture catalog is an explicit mock-provider dependency only.
+        # Live research caches its own offers for checkout revalidation.
+        if settings is None or settings.catalog_provider == "mock":
+            path = fixture_path or Path(__file__).parent / "fixtures" / "catalog.json"
+            raw = json.loads(path.read_text())
+            self.offers = [
+                schemas.Offer.model_validate(item) for group in raw.values() for item in group
+            ]
+            self.by_id = {offer.id: offer for offer in self.offers}
+        if self._research_agent is None and settings is not None:
             self._research_agent = self._build_research_agent(settings)
 
     def search(
@@ -334,6 +341,7 @@ class MockCatalogModule:
         offers: list[schemas.Offer],
         *,
         cache: bool = False,
+        include_fixture_alternatives: bool = True,
     ) -> CatalogSearchResult:
         candidates = [self._for_deadline(offer, constraints.delivery_deadline) for offer in offers]
         if cache:
@@ -341,7 +349,7 @@ class MockCatalogModule:
         exact = [offer for offer in candidates if self._is_exact(offer, constraints)]
         if exact:
             return CatalogSearchResult(new_id("search"), "offers_found", candidates, [])
-        alternatives = self._alternatives(constraints, candidates)
+        alternatives = self._alternatives(constraints, candidates) if include_fixture_alternatives else []
         return CatalogSearchResult(
             new_id("search"),
             "alternatives_found" if alternatives else "no_results",
@@ -349,12 +357,10 @@ class MockCatalogModule:
             alternatives,
         )
 
-    def _build_research_agent(self, settings: Settings | None) -> CatalogModule | None:
+    def _build_research_agent(self, settings: Settings) -> CatalogModule | None:
         from app.factories import build_catalog_research_module
-        from app.settings import Settings
 
-        configured_settings = settings or Settings.from_env()
-        return build_catalog_research_module(configured_settings, self)
+        return build_catalog_research_module(settings, self)
 
     def get_offer(self, offer_id: str) -> schemas.Offer | None:
         offer = self.by_id.get(offer_id)
@@ -445,7 +451,7 @@ class ComparisonModule:
         settings: Settings | None = None,
     ):
         self._rationale = rationale
-        if self._rationale is None:
+        if self._rationale is None and settings is not None:
             try:
                 self._rationale = self._build_rationale(settings)
             except Exception:

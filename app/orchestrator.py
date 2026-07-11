@@ -10,6 +10,7 @@ from app.modules import (
     ConsentAuditModule,
     DemoProfileModule,
     DomainError,
+    IntentGuardrailModule,
     MockCatalogModule,
     MockCheckoutModule,
     MockTrackingModule,
@@ -17,6 +18,7 @@ from app.modules import (
     new_id,
     utcnow,
 )
+from app.settings import Settings
 
 
 @dataclass
@@ -78,11 +80,13 @@ class WorkflowOrchestrator:
         "cancelled": [],
     }
 
-    def __init__(self, intent=None):
+    def __init__(self, intent=None, settings: Settings | None = None):
         self.profile = DemoProfileModule()
-        self.intent = intent or build_intent_module()
-        self.catalog = MockCatalogModule()
-        self.comparison = ComparisonModule()
+        self.intent = intent or (
+            build_intent_module(settings) if settings is not None else IntentGuardrailModule()
+        )
+        self.catalog = MockCatalogModule(settings=settings)
+        self.comparison = ComparisonModule(settings=settings)
         self.proposals = ProposalModule()
         self.consent = ConsentAuditModule()
         self.checkout = MockCheckoutModule(self.catalog)
@@ -584,7 +588,7 @@ class WorkflowOrchestrator:
     def _research_and_continue(self, record: WorkflowRecord) -> None:
         if not record.constraints:
             raise DomainError("Cannot research without shopping constraints")
-        self._transition(record, "researching", "Searching the mocked catalog.")
+        self._transition(record, "researching", "Searching for products.")
         search = self.catalog.search(record.constraints, self.profile.get_profile())
         self._event(
             record,
@@ -604,7 +608,7 @@ class WorkflowOrchestrator:
             return
         if search.status == "no_results":
             record.alternatives = []
-            self._transition(record, "no_exact_match", "No mocked catalog offer matches this request.")
+            self._transition(record, "no_exact_match", "No offer matches this request.")
             return
 
         record.alternatives = None

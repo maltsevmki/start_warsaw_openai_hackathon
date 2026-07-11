@@ -1,8 +1,11 @@
 from types import SimpleNamespace
 
+import pytest
+
 from app import schemas
 from app.adapters.openai_research import OfferDraft, OfferList, OpenAIResearchAgent
-from app.modules import DemoProfileModule, IntentGuardrailModule, MockCatalogModule
+from app.modules import DemoProfileModule, DomainError, IntentGuardrailModule, MockCatalogModule
+from app.settings import Settings
 
 
 class FakeResponses:
@@ -85,7 +88,7 @@ def test_openai_research_returns_schema_valid_offers_and_caches_them():
     assert client.responses.calls[0]["tools"] == [{"type": "web_search"}]
 
 
-def test_openai_research_keeps_transparent_alternatives_for_canned_offers():
+def test_openai_research_never_uses_fixture_alternatives_for_canned_offers():
     profile = DemoProfileModule().get_profile()
     constraints = IntentGuardrailModule().classify(
         "Find noise cancelling headphones under 200 PLN that arrive today.", [], profile
@@ -98,14 +101,11 @@ def test_openai_research_keeps_transparent_alternatives_for_canned_offers():
 
     result = agent.search(constraints, profile)
 
-    assert result.status == "alternatives_found"
-    assert {alternative.id for alternative in result.alternatives} == {
-        "alt_delivery_tomorrow",
-        "alt_budget_300",
-    }
+    assert result.status == "no_results"
+    assert result.alternatives == []
 
 
-def test_openai_research_failure_uses_fixture_catalog():
+def test_openai_research_failure_returns_a_user_visible_error():
     profile = DemoProfileModule().get_profile()
     constraints = IntentGuardrailModule().classify(
         "Find me a monitor under 1000 PLN for my MacBook by tomorrow.", [], profile
@@ -113,7 +113,29 @@ def test_openai_research_failure_uses_fixture_catalog():
     catalog = MockCatalogModule()
     agent = OpenAIResearchAgent(api_key="", client=FailingOpenAI(), deterministic=catalog)
 
-    result = agent.search(constraints, profile)
+    with pytest.raises(DomainError) as error:
+        agent.search(constraints, profile)
 
-    assert result.status == "offers_found"
-    assert any(offer.id == "offer_monitor_happy" for offer in result.offers)
+    assert error.value.status_code == 503
+    assert error.value.message == "Live product research is temporarily unavailable. Please try again."
+
+
+def test_live_mode_does_not_load_fixtures_when_the_api_key_is_missing():
+    profile = DemoProfileModule().get_profile()
+    constraints = IntentGuardrailModule().classify(
+        "Find me a monitor under 1000 PLN for my MacBook by tomorrow.", [], profile
+    ).constraints
+    settings = Settings(
+        intent_provider="mock",
+        openai_api_key=None,
+        openai_intent_model="gpt-5-mini",
+        openai_timeout_seconds=20,
+        openai_fallback_to_mock=True,
+        catalog_provider="openai",
+    )
+    catalog = MockCatalogModule(settings=settings)
+
+    assert catalog.offers == []
+    with pytest.raises(DomainError, match="not configured") as error:
+        catalog.search(constraints, profile)
+    assert error.value.status_code == 503

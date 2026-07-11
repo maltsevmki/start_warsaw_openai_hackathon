@@ -703,6 +703,11 @@ export interface components {
             /** Revisionid */
             revisionId: string;
         };
+        /** SelectOfferRequest */
+        SelectOfferRequest: {
+            /** Offerid */
+            offerId: string;
+        };
         /** ShoppingConstraints */
         ShoppingConstraints: {
             /** Productcategory */
@@ -821,7 +826,7 @@ export interface components {
             /** Summary */
             summary: string;
             /** Availableactions */
-            availableActions: ("reply_to_clarification" | "accept_alternative" | "reject_alternative" | "approve_proposal" | "reject_proposal" | "execute_checkout" | "simulate_tracking" | "cancel" | "rollback")[];
+            availableActions: ("reply_to_clarification" | "accept_alternative" | "reject_alternative" | "approve_proposal" | "reject_proposal" | "select_offer" | "execute_checkout" | "simulate_tracking" | "cancel" | "rollback")[];
         };
         /** WorkflowView */
         WorkflowView: {
